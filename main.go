@@ -39,7 +39,7 @@ func main() {
 		doUpdate     = flag.Bool("update", false, "check for and install latest version of px0")
 		noColor      = flag.Bool("no-color", false, "disable colour output")
 		quiet        = flag.Bool("quiet", false, "suppress narration")
-		verbose      = flag.Bool("verbose", false, "log requests, searches, symbols, and agent prompts to terminal")
+		verbose      = flag.Bool("verbose", false, "log startup steps, requests, searches, symbols, and agent prompts to terminal")
 		noTelemetry  = flag.Bool("no-telemetry", false, "disable anonymous usage telemetry")
 		agentCmd     = flag.String("agent", "", "pin the coding harness used for edits (claude, gemini, cursor-agent, agy, opencode, codex, aider, goose, or a command template containing {prompt}); detected and chosen in the UI when omitted")
 		noAgent      = flag.Bool("no-agent", false, "do not offer editing through a coding harness")
@@ -110,6 +110,7 @@ func main() {
 	var pr *prSession
 	var root, initialFile string
 	var initialLine int
+	var targetDur time.Duration
 	if isPR {
 		sp := newSpinner(fmt.Sprintf("Preparing PR #%d (%s/%s)...", prTarget.Number, prTarget.Owner, prTarget.Repo), os.Stdout)
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -129,18 +130,23 @@ func main() {
 		pr = p
 		root = p.Root()
 	} else {
+		tStart := time.Now()
 		r, f, l, err := resolveTarget(target)
 		if err != nil {
 			fatal(err)
 		}
+		targetDur = time.Since(tStart)
 		root, initialFile, initialLine = r, f, l
 	}
 
+	tListen := time.Now()
 	ln, addr, err := listen(*host, *port)
 	if err != nil {
 		fatal(err)
 	}
+	listenDur := time.Since(tListen)
 
+	tInit := time.Now()
 	ix := NewIndex(root)
 	lsp := newLSPManager(root, !*noLSP)
 	tel := NewTelemetryService(*noTelemetry)
@@ -165,6 +171,7 @@ func main() {
 		}
 		pxSrv.SetAgent(agent)
 	}
+	initDur := time.Since(tInit)
 
 	srv := &http.Server{Handler: pxSrv}
 
@@ -184,9 +191,21 @@ func main() {
 	uiKV("url", uiAccent(url, os.Stdout), 11, os.Stdout)
 	uiHint("ctrl-c to stop", os.Stdout)
 
+	if uiVerbose {
+		if !isPR {
+			uiStatus("ok", "resolved workspace target", fmtDuration(targetDur), 0, os.Stdout)
+		}
+		uiStatus("ok", fmt.Sprintf("bound TCP listener on %s", addr), fmtDuration(listenDur), 0, os.Stdout)
+		uiStatus("ok", "initialized HTTP server and services", fmtDuration(initDur), 0, os.Stdout)
+	}
+
 	// Launch browser immediately without blocking startup.
 	if !*noOpen {
+		tBrowser := time.Now()
 		go openBrowser(url)
+		if uiVerbose {
+			uiStatus("ok", "spawned browser launcher", fmtDuration(time.Since(tBrowser)), 0, os.Stdout)
+		}
 	}
 
 	// Index workspace asynchronously so the server and UI respond in <1ms.
@@ -194,10 +213,20 @@ func main() {
 		ix.Build()
 		n, _, ms := ix.Stats()
 		uiStatus("ok", fmt.Sprintf("indexed %d files", n), fmt.Sprintf("%dms", ms), 0, os.Stdout)
-		if names := lsp.Available(); len(names) > 0 {
-			uiBullet(fmt.Sprintf("language servers: %s (started on first use)", strings.Join(names, ", ")), os.Stdout)
+		tLSP := time.Now()
+		names := lsp.Available()
+		lspDur := time.Since(tLSP)
+		if len(names) > 0 {
+			if uiVerbose {
+				uiStatus("ok", fmt.Sprintf("discovered language servers: %s", strings.Join(names, ", ")), fmtDuration(lspDur), 0, os.Stdout)
+			} else {
+				uiBullet(fmt.Sprintf("language servers: %s (started on first use)", strings.Join(names, ", ")), os.Stdout)
+			}
+		} else if uiVerbose {
+			uiStatus("ok", "checked language servers (none installed)", fmtDuration(lspDur), 0, os.Stdout)
 		}
 		if agent != nil {
+			tAgent := time.Now()
 			var found []string
 			for _, h := range agent.Detect() {
 				if h.Installed {
@@ -208,8 +237,13 @@ func main() {
 					found = append(found, item)
 				}
 			}
-			if uiVerbose && len(found) > 0 {
-				uiStatus("info", uiInfo("coding harnesses: "+strings.Join(found, ", "), os.Stdout), "", 0, os.Stdout)
+			agentDur := time.Since(tAgent)
+			if uiVerbose {
+				if len(found) > 0 {
+					uiStatus("ok", fmt.Sprintf("detected coding harnesses: %s", strings.Join(found, ", ")), fmtDuration(agentDur), 0, os.Stdout)
+				} else {
+					uiStatus("ok", "checked coding harnesses (none found)", fmtDuration(agentDur), 0, os.Stdout)
+				}
 			}
 		}
 
