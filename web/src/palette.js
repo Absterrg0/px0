@@ -13,7 +13,7 @@ import { showCalls } from './calls.js';
 import { showHelp } from './shortcuts.js';
 import { listThemes, currentTheme, setTheme, cycleTheme } from './theme.js';
 import { togglePreview } from './markdown.js';
-import { openSettings } from './settings.js';
+import { openSettings, isAutoRevealEnabled } from './settings.js';
 import { showVimHelp, isVimEnabled, setVimModeEnabled } from './vim.js';
 import { launchPR } from './pr.js';
 import { newThread } from './thread.js';
@@ -22,6 +22,7 @@ export const overlay = $('#overlay');
 export const palInput = $('#pal');
 export const palList = $('#pal-list');
 export let pal = null;
+
 
 export const COMMANDS = [
   { name: withKeys('Preferences: Open Settings (UI) ({Mod+,})'), run: () => openSettings('ui') },
@@ -169,13 +170,18 @@ export function movePalette(delta) {
   drawPalette();
 }
 
-export function acceptPalette() {
+export async function acceptPalette() {
   if (!pal || !pal.items.length) return;
   const it = pal.items[pal.sel];
   if (it.kind === 'theme') pal.restoreTheme = null;
   closePalette();
-  if (it.kind === 'file') openFile(it.path);
-  else if (it.kind === 'sym' || it.kind === 'line') {
+  if (it.kind === 'file') {
+    await openFile(it.path);
+    if (isAutoRevealEnabled()) {
+      await showPanel('files');
+      await revealFile(it.path);
+    }
+  } else if (it.kind === 'sym' || it.kind === 'line') {
     const d = doc_(); if (!d) return;
     d.cur = it.n; centerLine(it.n); render(); updateStatus(); pushHistory(d.path, it.n);
   } else if (it.kind === 'cmd') it.cmd.run();

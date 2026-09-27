@@ -3,6 +3,8 @@ import { $, $$, esc, api, apiPost, apiPostJson, S } from './state.js';
 import { openFile } from './tabs.js';
 import { showToast, copyToClipboard } from './ui.js';
 import { closeSelMenu } from './selbar.js';
+import { on } from './bus.js';
+import { isAutoRevealEnabled } from './settings.js';
 
 export const treeEl = $('#tree');
 const treeMenu = $('#tree-menu');
@@ -227,6 +229,8 @@ export async function revealDir(dir) {
 }
 
 export async function revealFile(path) {
+  if (!path) return;
+  path = path.replace(/^\/+/, '');
   const idx = path.lastIndexOf('/');
   if (idx > 0) await revealDir(path.slice(0, idx));
   const row = treeEl.querySelector('[data-file="' + CSS.escape(path) + '"]');
@@ -567,5 +571,11 @@ export function initTree() {
       f.classList.add('sel');
       openFile(f.dataset.file);
     }
+  });
+
+  on('tab:activated', ({ doc }) => {
+    if (!doc || !doc.path || !isAutoRevealEnabled()) return;
+    if (document.body.classList.contains('side-hidden')) return;
+    revealFile(doc.path);
   });
 }
