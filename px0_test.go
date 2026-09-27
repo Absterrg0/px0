@@ -1140,6 +1140,95 @@ func TestFuzzyCaseSensitivity(t *testing.T) {
 	}
 }
 
+func TestSetRawHeaders(t *testing.T) {
+	cases := []struct {
+		path            string
+		wantContentType string
+		wantFilename    string
+	}{
+		{"index.html", "application/octet-stream", "index.html"},
+		{"app.js", "application/octet-stream", "app.js"},
+		{"main.go", "application/octet-stream", "main.go"},
+		{"nested/path/style.css", "application/octet-stream", "style.css"},
+		{"assets/logo.png", "image/png", "logo.png"},
+		{"assets/photo.jpg", "image/jpeg", "photo.jpg"},
+		{"assets/anim.gif", "image/gif", "anim.gif"},
+		{"assets/vector.svg", "image/svg+xml", "vector.svg"},
+		{"assets/icon.ico", "image/x-icon", "icon.ico"},
+		{"assets/pic.webp", "image/webp", "pic.webp"},
+	}
+
+	for _, c := range cases {
+		rec := httptest.NewRecorder()
+		setRawHeaders(rec, c.path)
+
+		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s: got nosniff header %q, want 'nosniff'", c.path, got)
+		}
+
+		gotCT := rec.Header().Get("Content-Type")
+		if strings.HasPrefix(c.wantContentType, "image/") {
+			if !strings.HasPrefix(gotCT, "image/") {
+				t.Errorf("%s: got Content-Type %q, want image/*", c.path, gotCT)
+			}
+		} else if gotCT != c.wantContentType {
+			t.Errorf("%s: got Content-Type %q, want %q", c.path, gotCT, c.wantContentType)
+		}
+
+		gotCD := rec.Header().Get("Content-Disposition")
+		if !strings.HasPrefix(gotCD, "attachment") || !strings.Contains(gotCD, c.wantFilename) {
+			t.Errorf("%s: got Content-Disposition %q, expected attachment containing %q", c.path, gotCD, c.wantFilename)
+		}
+	}
+}
+
+func TestRawEndpointHeaders(t *testing.T) {
+	s, root := newTestServer(t)
+
+	// Create test files
+	files := map[string]string{
+		"evil.html": "<!DOCTYPE html><html><script>alert(1)</script></html>",
+		"icon.svg":  `<svg xmlns="http://www.w3.org/2000/svg"><circle r="10"/></svg>`,
+		"data.json": `{"foo": "bar"}`,
+	}
+	for rel, content := range files {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cases := []struct {
+		rel             string
+		wantContentType string
+		wantDisposition string
+	}{
+		{"main.go", "application/octet-stream", "main.go"},
+		{"evil.html", "application/octet-stream", "evil.html"},
+		{"data.json", "application/octet-stream", "data.json"},
+		{"icon.svg", "image/svg+xml", "icon.svg"},
+	}
+
+	for _, tc := range cases {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/api/raw?path="+url.QueryEscape(tc.rel), nil)
+		s.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: expected 200, got %d (body: %s)", tc.rel, rec.Code, rec.Body.String())
+		}
+		if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+			t.Errorf("%s: X-Content-Type-Options = %q, want nosniff", tc.rel, got)
+		}
+		if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, tc.wantContentType) {
+			t.Errorf("%s: Content-Type = %q, want %q", tc.rel, got, tc.wantContentType)
+		}
+		if got := rec.Header().Get("Content-Disposition"); !strings.Contains(got, tc.wantDisposition) {
+			t.Errorf("%s: Content-Disposition = %q, want %q", tc.rel, got, tc.wantDisposition)
+		}
+	}
+}
+
 
 
 

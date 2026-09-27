@@ -810,6 +810,18 @@ var imageExt = map[string]bool{
 	".svg": true, ".ico": true, ".bmp": true, ".avif": true,
 }
 
+var imageMime = map[string]string{
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif":  "image/gif",
+	".webp": "image/webp",
+	".svg":  "image/svg+xml",
+	".ico":  "image/x-icon",
+	".bmp":  "image/bmp",
+	".avif": "image/avif",
+}
+
 func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	abs, rel, ok := s.resolvePath(q.Get("path"))
@@ -884,15 +896,38 @@ func (s *Server) handleClose(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "path": rel})
 }
 
+func setRawHeaders(w http.ResponseWriter, rel string) {
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	base := filepath.Base(rel)
+	cd := mime.FormatMediaType("attachment", map[string]string{
+		"filename": base,
+	})
+	if cd == "" {
+		cd = fmt.Sprintf(`attachment; filename=%q`, base)
+	}
+	w.Header().Set("Content-Disposition", cd)
+
+	ext := strings.ToLower(filepath.Ext(rel))
+	ct := ""
+	if imageExt[ext] {
+		ct = mime.TypeByExtension(ext)
+		if ct == "" {
+			ct = imageMime[ext]
+		}
+	}
+	if ct == "" || !strings.HasPrefix(ct, "image/") {
+		ct = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", ct)
+}
+
 func (s *Server) handleRaw(w http.ResponseWriter, r *http.Request) {
 	abs, rel, ok := s.safePath(r.URL.Query().Get("path"))
 	if !ok {
 		fail(w, 400, "bad path")
 		return
 	}
-	if ct := mime.TypeByExtension(filepath.Ext(rel)); ct != "" {
-		w.Header().Set("Content-Type", ct)
-	}
+	setRawHeaders(w, rel)
 	http.ServeFile(w, r, abs)
 }
 
