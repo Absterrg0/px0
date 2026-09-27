@@ -1229,6 +1229,43 @@ func TestRawEndpointHeaders(t *testing.T) {
 	}
 }
 
+func TestContentSecurityPolicyHeader(t *testing.T) {
+	s, _ := newTestServer(t)
+
+	endpoints := []string{"/", "/api/meta", "/api/raw?path=main.go"}
+	for _, ep := range endpoints {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, ep, nil)
+		s.ServeHTTP(rec, req)
+
+		csp := rec.Header().Get("Content-Security-Policy")
+		if csp == "" {
+			t.Fatalf("%s: missing Content-Security-Policy header", ep)
+		}
+		if csp != contentSecurityPolicy {
+			t.Errorf("%s: got CSP %q, want %q", ep, csp, contentSecurityPolicy)
+		}
+
+		requiredDirectives := []string{
+			"default-src 'self'",
+			"script-src 'self'",
+			"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+			"font-src 'self' https://fonts.gstatic.com",
+			"img-src 'self' data: https: http:",
+			"connect-src 'self'",
+			"object-src 'none'",
+			"base-uri 'self'",
+			"frame-ancestors 'none'",
+			"form-action 'none'",
+		}
+		for _, dir := range requiredDirectives {
+			if !strings.Contains(csp, dir) {
+				t.Errorf("%s: CSP missing directive %q", ep, dir)
+			}
+		}
+	}
+}
+
 
 
 

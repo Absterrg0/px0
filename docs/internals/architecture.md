@@ -181,6 +181,21 @@ The `/api/lsp/install` and `/api/lsp/start` endpoints execute shell commands (e.
 1. The `Host` header is validated to ensure it is strictly an IP address (`127.0.0.1`, `[::1]`) or `localhost`. This prevents DNS-rebinding attacks.
 1. The executed command is never supplied by the client; it is looked up exclusively from the hard-coded internal `lspRegistry`, or, for agent edits, from the harness the user picked (only the instruction text comes from the client).
 
+### Content Security Policy (CSP)
+
+`ServeHTTP` sets a strict `Content-Security-Policy` header on all responses to mitigate Cross-Site Scripting (XSS) and data exfiltration in depth:
+
+- `default-src 'self';`
+- `script-src 'self';` (disallows inline scripts; blocks injected `<script>` tags and event handlers)
+- `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;` (allows Google Fonts and dynamic UI styling)
+- `font-src 'self' https://fonts.gstatic.com;`
+- `img-src 'self' data: https: http:;` (supports icons, data URI previews, and external markdown images)
+- `connect-src 'self';` (prevents exfiltration to third-party endpoints)
+- `object-src 'none';`
+- `base-uri 'self';` (allows `<base href="...">` routing while preventing base-tag hijacking)
+- `frame-ancestors 'none';` (guards against clickjacking)
+- `form-action 'none';`
+
 ### Self-Update Integrity
 
 Before `px0 --update` executes or installs a release binary, it verifies the download against the SHA-256 digest in that release's `checksums.txt` asset. Missing, malformed, or mismatched checksum data aborts the update without replacing the current executable.
