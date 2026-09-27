@@ -2,14 +2,14 @@
 import { $, esc, S, doc_, api, debounce, withKeys } from './state.js';
 import { render, toggleWordWrap } from './renderer.js';
 import { openFile, centerLine, closeTab, reopenClosedTab } from './tabs.js';
-import { updateStatus } from './status.js';
+import { updateStatus, openLspMenu } from './status.js';
 import { pushHistory } from './history.js';
 import { showPanel, reindexWorkspace } from './panels.js';
 import { openFind } from './find.js';
 import { gotoDefinition, findReferences } from './lsp.js';
 import { revealFile } from './tree.js';
 import { showRightInspector, hideRightInspector } from './inspector.js';
-import { showCalls, openLspSetup } from './calls.js';
+import { showCalls } from './calls.js';
 import { showHelp } from './shortcuts.js';
 import { listThemes, currentTheme, setTheme, cycleTheme } from './theme.js';
 import { togglePreview } from './markdown.js';
@@ -34,7 +34,8 @@ export const COMMANDS = [
   { name: 'Go to Definition', run: () => gotoDefinition() },
   { name: 'Find All References (Right Panel)', run: () => findReferences() },
   { name: withKeys('Show Call Trail: Callers / Callees ({Alt+Shift+H})'), run: () => showCalls() },
-  { name: 'Set Up Language Server…', run: () => openLspSetup() },
+  { name: 'Language Servers: Setup & Manage…', run: () => openLspMenu() },
+  { name: 'Set Up Language Server…', run: () => openLspMenu() },
   { name: 'Toggle Right Inspector (Symbols & References)', run: () => {
     if (document.body.classList.contains('right-hidden')) showRightInspector('refs');
     else hideRightInspector();

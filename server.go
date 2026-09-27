@@ -159,6 +159,8 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc(s.routePath("/api/lsp/setup"), s.handleLSPSetup)
 	s.mux.HandleFunc(s.routePath("/api/lsp/install"), s.handleLSPInstall)
 	s.mux.HandleFunc(s.routePath("/api/lsp/start"), s.handleLSPStart)
+	s.mux.HandleFunc(s.routePath("/api/lsp/stop"), s.handleLSPStop)
+	s.mux.HandleFunc(s.routePath("/api/lsp/servers"), s.handleLSPServers)
 	s.mux.HandleFunc(s.routePath("/api/agent/harnesses"), s.handleAgentHarnesses)
 	s.mux.HandleFunc(s.routePath("/api/agent/select"), s.handleAgentSelect)
 	s.mux.HandleFunc(s.routePath("/api/agent/edit"), s.handleAgentEdit)
