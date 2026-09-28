@@ -890,6 +890,33 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 	}
 	st, err := os.Stat(abs)
 	if err != nil {
+		if os.IsNotExist(err) && gitAvailable(s.ix.Root()) {
+			diffAvail := false
+			if s.pr != nil {
+				diffAvail = gitDiffAgainst(s.ix.Root(), rel, s.diffBase) != "" ||
+					gitDiffBetween(s.ix.Root(), rel, s.diffBase, s.prHeadSHA) != "" ||
+					gitDiffAgainst(s.ix.Root(), rel, s.prHeadSHA) != ""
+			} else {
+				diffAvail = gitDiffAgainst(s.ix.Root(), rel, s.diffBase) != ""
+			}
+			if diffAvail {
+				d := newDoc("", rel)
+				if uiVerbose {
+					uiStatus("info", "view", fmt.Sprintf("%s · deleted (0 bytes)", rel), 0, os.Stdout)
+				}
+				writeJSON(w, map[string]any{
+					"path": rel, "lang": d.Lang, "total": 0, "maxCols": 0,
+					"start": 0, "lines": []string{}, "size": 0,
+					"exact": true, "refine": false,
+					"markdown":      isMarkdown(rel),
+					"table":         isTable(rel),
+					"diffAvailable": true,
+					"deleted":       true,
+					"lsp":           s.lspBrief(rel),
+				})
+				return
+			}
+		}
 		fail(w, 404, err.Error())
 		return
 	}

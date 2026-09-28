@@ -269,6 +269,37 @@ export async function expandDirtyDirs(container = treeEl, version = expansionVer
 }
 
 export async function patchTreeGitStatus(statuses = {}, dirtyDirs = {}, staged = {}, yourStatuses = {}, yourDirtyDirs = {}) {
+  // Check if any changed files belong to an open directory (or root) but don't have a DOM element yet,
+  // or if any previously deleted files are now clean (so they should disappear from the tree).
+  let needRefresh = false;
+  for (const [p, code] of Object.entries(statuses)) {
+    const fileRow = treeEl.querySelector('[data-file="' + CSS.escape(p) + '"]');
+    if (!fileRow) {
+      const lastSlash = p.lastIndexOf('/');
+      const parentDir = lastSlash >= 0 ? p.slice(0, lastSlash) : '';
+      if (parentDir === '' || openDirs.has(parentDir)) {
+        needRefresh = true;
+        break;
+      }
+    }
+  }
+
+  if (!needRefresh) {
+    const dirtyFiles = treeEl.querySelectorAll('.tr.file.dirty');
+    for (const fileRow of dirtyFiles) {
+      const p = fileRow.dataset.file;
+      if (!statuses[p] && fileRow.classList.contains('git-D')) {
+        needRefresh = true;
+        break;
+      }
+    }
+  }
+
+  if (needRefresh) {
+    await refreshTree();
+    return;
+  }
+
   // 1. Update folder dirty and your-dirty classes
   const dirRows = treeEl.querySelectorAll('.tr.dir');
   for (const dirRow of dirRows) {

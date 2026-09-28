@@ -93,11 +93,11 @@ export async function openFile(path, opts = {}) {
     let initialDismissed = false;
 
     if (hasDiff) {
-      if (wantsSource) {
+      if (wantsSource && !j.deleted) {
         initialDiffMode = null;
         initialDismissed = true;
         initialOpenedInDiff = false;
-      } else if (wantsDiff) {
+      } else if (wantsDiff || j.deleted) {
         initialDiffMode = layoutPref() || 'split';
         initialDismissed = false;
         initialOpenedInDiff = true;
@@ -119,6 +119,7 @@ export async function openFile(path, opts = {}) {
       chunks: new Set(isImg ? [] : [start / CHUNK]),
       pending: new Set(), refining: new Set(), scrollTop: 0, cur: line || 1,
       outline: null, gen: 0, markdown: !isImg && !!j.markdown, table: !isImg && !!j.table, isImage: isImg,
+      deleted: !isImg && !!j.deleted,
       gutter: null,
       diffMode: initialDiffMode,
       diffAvailable: hasDiff,
@@ -271,14 +272,14 @@ export async function reloadOpenTabs({ onlyIfChanged = false } = {}) {
     const keep = tgt.oldDoc;
     const hasDiff = !!j.diffAvailable;
     if (onlyIfChanged && keep.size === j.size && keep.total === j.total &&
-        !!keep.diffAvailable === hasDiff) continue;
+        !!keep.diffAvailable === hasDiff && !!keep.deleted === !!j.deleted) continue;
     anyChanged = true;
-    const newCur = Math.max(1, Math.min(keep.cur || 1, j.total));
+    const newCur = Math.max(1, Math.min(keep.cur || 1, j.total || 1));
 
     /* A reload keeps each tab in the view it was in. The file changing under
        it, say from an agent edit, is no reason to swap source for a diff, so a
        tab in source is marked dismissed and loadGutter leaves it there too. */
-    const diffMode = hasDiff ? (keep.diffMode || null) : null;
+    const diffMode = hasDiff ? (keep.diffMode || (j.deleted ? (layoutPref() || 'split') : null)) : null;
 
     const d = {
       path: tgt.path,
@@ -298,12 +299,13 @@ export async function reloadOpenTabs({ onlyIfChanged = false } = {}) {
       gen: 0,
       markdown: !!j.markdown,
       table: !!j.table,
+      deleted: !!j.deleted,
       mdScroll: keep.mdScroll || 0,
       gutter: null,
       diffMode,
       diffAvailable: hasDiff,
-      diffDismissed: !!keep.diffDismissed || !keep.diffMode,
-      openedInDiffView: !!keep.openedInDiffView || !!keep.diffMode,
+      diffDismissed: !!keep.diffDismissed || (!keep.diffMode && !j.deleted),
+      openedInDiffView: !!keep.openedInDiffView || !!keep.diffMode || !!j.deleted,
       diffScroll: keep === activeDoc && keep.diffMode ? diffScrollTop() : 0,
       prCollapsed: keep.prCollapsed,
       youCollapsed: keep.youCollapsed,
@@ -450,7 +452,7 @@ export async function reopenClosedTab() {
 
 export function drawTabs() {
   $('#tabs').innerHTML = S.tabs.map((t, i) =>
-    '<div class="tab' + (i === S.active ? ' active' : '') + (t.isImage ? ' tab-image' : '') + '" data-i="' + i + '" title="' + esc(t.path) + '">' +
+    '<div class="tab' + (i === S.active ? ' active' : '') + (t.isImage ? ' tab-image' : '') + (t.deleted ? ' tab-deleted' : '') + '" data-i="' + i + '" title="' + esc(t.path) + '">' +
     (t.isImage ? '<svg class="tab-icon" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="2" width="12" height="12" rx="2"/><circle cx="5.5" cy="5.5" r="1.5"/><path d="M14 10l-3.5-3.5L3 14"/></svg>' : '') +
     '<span class="tn">' + esc(t.name) + '</span>' +
     '<span class="x" data-close="' + i + '" title="' + withKeys('Close tab ({Alt+W})') + '"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6"/></svg></span></div>').join('');
