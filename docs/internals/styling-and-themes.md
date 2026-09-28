@@ -52,9 +52,9 @@ The explorer header controls use the same tokenized `.mini` button style as Re-i
   color-scheme: dark;
   ```
 1. Define the required color tokens (see Token Reference below).
-1. Preview live without recompiling Go code by running px0 in dev mode:
+1. Preview by running px0 with `go run .` (rebuild after each CSS change; themes are embedded):
   ```bash
-  go run . -dev . .
+  go run . .
   ```
 1. Run unit tests to verify theme conformance:
   ```bash

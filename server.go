@@ -29,18 +29,8 @@ import (
 //go:embed web
 var embedded embed.FS
 
-// assets is the embedded web/ directory, or the one on disk under -dev.
+// assets is the embedded web/ directory.
 var assets fs.FS = embedded
-
-// useDiskAssets serves web/ from the filesystem so the UI can be edited without
-// rebuilding. Development convenience only.
-func useDiskAssets(dir string) error {
-	if _, err := os.Stat(filepath.Join(dir, "web", "index.html")); err != nil {
-		return err
-	}
-	assets = os.DirFS(dir)
-	return nil
-}
 
 func cleanBasePath(p string) string {
 	p = strings.TrimSpace(p)

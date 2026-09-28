@@ -34,10 +34,10 @@ func main() {
 		noOpen       = flag.Bool("no-open", false, "do not launch a browser")
 		noLSP        = flag.Bool("no-lsp", false, "do not use language servers, even if installed")
 		noGit        = flag.Bool("no-git", false, "disable git awareness")
-		dev          = flag.String("dev", "", "serve the UI from this source directory instead of the embedded copy")
 		showVer      = flag.Bool("version", false, "print version and exit")
 		showVerShort = flag.Bool("v", false, "print version and exit (shorthand)")
 		doUpdate     = flag.Bool("update", false, "check for and install latest version of px0")
+		noUpdate     = flag.Bool("no-update", false, "do not auto-update px0 on startup")
 		noColor      = flag.Bool("no-color", false, "disable colour output")
 		quiet        = flag.Bool("quiet", false, "suppress narration")
 		verbose      = flag.Bool("verbose", false, "log startup steps, requests, searches, symbols, and agent prompts to terminal")
@@ -78,12 +78,6 @@ func main() {
 			fatal(err)
 		}
 		return
-	}
-
-	if *dev != "" {
-		if err := useDiskAssets(*dev); err != nil {
-			fatal(fmt.Errorf("-dev %s: %w", *dev, err))
-		}
 	}
 
 	// A full pull request URL (e.g. https://github.com/owner/repo/pull/123)
@@ -261,8 +255,11 @@ func main() {
 		})
 	}()
 
-	// Check for updates asynchronously once a day without delaying startup (<1ms).
-	go checkDailyUpdate(version)
+	// Check for updates in the background once the server is already up, so
+	// px0 never makes a network call before serving the first request.
+	if !*noUpdate {
+		go autoUpdate(version)
+	}
 
 	// Language servers are children that can hold gigabytes. Shut them down on
 	// the way out rather than leaving them for the OS to reap.
