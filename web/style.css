@@ -976,6 +976,35 @@ body.word-wrap .c { white-space: pre-wrap; word-break: break-word; overflow-wrap
 .md mark { background: var(--mark); color: inherit; border-radius: 2px; }
 .md mark.md-hit.on, .md mark.md-hit.on * { background: var(--mark-active); color: var(--on-mark-active); }
 .md .footnotes { margin-top: 40px; font-size: .88em; color: var(--dim); }
+
+/* ---------- table preview (CSV / TSV) ----------
+   Shares #mdview with the Markdown preview; scoped to #md.csv so no .md rule
+   reaches it. The header row and the line gutter stick while the table scrolls. */
+#md.csv { padding: 0 0 40vh; font: 12px/1.5 var(--mono); color: var(--fg); }
+.csv-t { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+.csv-t th, .csv-t td { padding: 2px 12px; text-align: left; vertical-align: top; white-space: pre; font-variant-numeric: tabular-nums; }
+/* Long text wraps inside its cell instead of stretching the column: capped like a spreadsheet column. */
+.csv-t td:not(.ln), .csv-t th:not(.ln) { white-space: pre-wrap; max-width: 48ch; overflow-wrap: break-word; }
+.csv-t td + td, .csv-t th + th { box-shadow: inset 1px 0 0 var(--line); }
+.csv-t thead th { position: sticky; top: 0; z-index: 2; background: var(--bg2); font-weight: 600; box-shadow: inset 0 -1px 0 var(--line); }
+.csv-t thead th + th { box-shadow: inset 1px 0 0 var(--line), inset 0 -1px 0 var(--line); }
+.csv-t tbody tr:nth-child(even) td { background: var(--cur); }
+.csv-t .ln {
+  position: sticky; left: 0; z-index: 1; background: var(--bg); color: var(--faint);
+  text-align: right; padding: 2px 10px 2px 12px; user-select: none; box-shadow: inset -1px 0 0 var(--line);
+}
+.csv-t tbody tr:nth-child(even) td.ln { background: var(--bg); }
+.csv-t thead .ln { z-index: 3; background: var(--bg2); box-shadow: inset -1px 0 0 var(--line), inset 0 -1px 0 var(--line); }
+.csv-t td.miss, .csv-t tbody tr:nth-child(even) td.miss { background: repeating-linear-gradient(135deg, transparent 0 5px, var(--bg3) 5px 6px); }
+.csv-t mark { background: var(--mark); color: inherit; border-radius: 2px; }
+.csv-t mark.md-hit.on, .csv-t mark.md-hit.on * { background: var(--mark-active); color: var(--on-mark-active); }
+.csv-cap {
+  position: sticky; left: 0; width: max-content; max-width: 100%; box-sizing: border-box;
+  margin: 12px 0 0; padding: 8px 14px; font: 12px/1.5 var(--ui); color: var(--dim);
+}
+.csv-open-source { color: var(--accent-fg); font-weight: 600; }
+.csv-open-source:hover { text-decoration: underline; }
+.csv-empty { padding: 40px 24px; font: 13px var(--ui); color: var(--faint); }
 /* GitHub alerts: > [!NOTE], [!TIP], [!IMPORTANT], [!WARNING], [!CAUTION] */
 .md-alert { --alert: var(--accent); }
 .md-alert-tip { --alert: var(--gi); }

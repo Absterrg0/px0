@@ -30,6 +30,7 @@ type settings struct {
 	WorkbenchColorTheme         *string  `json:"workbench.colorTheme,omitempty"`
 	DiffEditorRenderSideBySide  *bool    `json:"diffEditor.renderSideBySide,omitempty"`
 	MarkdownPreviewOpen         *bool    `json:"markdown.preview.open,omitempty"`
+	TablePreviewOpen            *bool    `json:"table.preview.open,omitempty"`
 	TelemetryEnabled            *bool    `json:"telemetry.enabled,omitempty"`
 	GitHubToken                 *string  `json:"github.token,omitempty"`
 	GitCommitMessageInstruction *string  `json:"git.commitMessageInstruction,omitempty"`
@@ -179,6 +180,14 @@ var settingsSchema = []settingSchemaItem{
 		Key:         "markdown.preview.open",
 		Title:       "Markdown Preview",
 		Description: "Controls whether Markdown files open in rendered preview by default.",
+		Category:    "Workbench",
+		Type:        "boolean",
+		Default:     true,
+	},
+	{
+		Key:         "table.preview.open",
+		Title:       "Table View",
+		Description: "Controls whether CSV and TSV files open as a table by default.",
 		Category:    "Workbench",
 		Type:        "boolean",
 		Default:     true,

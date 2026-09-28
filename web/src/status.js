@@ -1,5 +1,5 @@
 import { $, S, doc_, api, apiPost, esc, withKeys } from './state.js';
-import { previewing } from './markdown.js';
+import { previewing, previewKind } from './markdown.js';
 import { layoutPref } from './diff.js';
 import { copyToClipboard, showToast } from './ui.js';
 
@@ -16,15 +16,21 @@ export function updateStatus() {
     }
   }
 
-  const isMd = !!(d && d.markdown), shown = previewing(d);
+  // Markdown and CSV/TSV tabs share the preview switch; only its label differs.
+  const kind = previewKind(d), isMd = !!kind, shown = previewing(d);
+  const label = kind === 'table' ? 'Table' : 'Preview';
   const mdBtn = $('[data-action="md-preview"]');
   if (mdBtn) {
     mdBtn.hidden = !isMd;
     mdBtn.classList.toggle('active', shown);
+    const l = $('.footer-btn-label', mdBtn);
+    if (l && isMd) l.textContent = label;
   }
   const sw = $('#md-switch');
   if (sw) {
     sw.hidden = !isMd;
+    const pb = $('[data-md="preview"]', sw);
+    if (pb && isMd) pb.textContent = label;
     document.body.classList.toggle('md-tab', isMd);
     for (const b of sw.children) b.classList.toggle('on', isMd && (b.dataset.md === 'preview') === shown);
   }

@@ -189,6 +189,14 @@ const BUILTIN_SCHEMA = [
     default: true
   },
   {
+    key: "table.preview.open",
+    title: "Table View",
+    description: "Controls whether CSV and TSV files open as a table by default.",
+    category: "Workbench",
+    type: "boolean",
+    default: true
+  },
+  {
     key: "explorer.compactFolders",
     title: "Compact Folders",
     description: "Controls whether the file tree renders single-child directory chains compactly.",
@@ -416,6 +424,11 @@ export function applySettingLive(key, val) {
     case 'markdown.preview.open': {
       S.mdPreview = val === true || val === 'true';
       try { localStorage.setItem('px0.mdPreview', S.mdPreview ? 'true' : 'false'); } catch {}
+      break;
+    }
+    case 'table.preview.open': {
+      S.tablePreview = val === true || val === 'true';
+      try { localStorage.setItem('px0.tablePreview', S.tablePreview ? 'true' : 'false'); } catch {}
       break;
     }
     case 'editor.vimMode': {

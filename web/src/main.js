@@ -73,6 +73,8 @@ initLineComment();
     // Restore Markdown preview (default ON)
     const mdPref = localStorage.getItem('px0.mdPreview');
     S.mdPreview = mdPref !== null ? mdPref === 'true' : true;
+    const tablePref = localStorage.getItem('px0.tablePreview');
+    S.tablePreview = tablePref !== null ? tablePref === 'true' : true;
 
     updateEditorOptionControls();
   } catch {}

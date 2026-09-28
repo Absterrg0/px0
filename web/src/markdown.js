@@ -10,12 +10,15 @@ import { showPanel } from './panels.js';
 import { revealDir } from './tree.js';
 import { findbar, runFind } from './find.js';
 import { hideHover } from './hover.js';
+import { buildTable } from './table.js';
 
 /* Markdown tabs open rendered. The server converts the file with goldmark and
    passes raw HTML through, so nothing it returns is trusted: mdSanitize rebuilds
    it against an allowlist in an inert document before any of it reaches the page.
    Every block carries the source line it starts on (data-line), which keeps the
-   preview in step with line-based navigation and with the source view. */
+   preview in step with line-based navigation and with the source view.
+   CSV and TSV tabs use the same overlay for a table (table.js), with its own
+   remembered setting; rows carry data-line the same way. */
 
 export const mdview = $('#mdview');
 const mdArticle = $('#md');
@@ -24,8 +27,15 @@ let mdShown = null;  // doc the preview is showing, null while it is hidden
 let mdDrawn = null;  // doc whose HTML is in the article; drawing can wait on a fetch
 let mdGen = 0;
 
+/* 'markdown', 'table', or '' for a tab with no rendered view. */
+export function previewKind(d = doc_()) {
+  return d ? (d.markdown ? 'markdown' : d.table ? 'table' : '') : '';
+}
+
 export function previewing(d = doc_()) {
-  return !!(d && d.markdown && S.mdPreview && !d.mdError && !d.diffMode);
+  const kind = previewKind(d);
+  const on = kind === 'markdown' ? S.mdPreview : kind === 'table' ? S.tablePreview : false;
+  return !!(on && !d.mdError && !d.diffMode);
 }
 
 /* Show or hide the preview to match the active tab. Call whenever that changes. */
@@ -43,10 +53,12 @@ export function syncPreview() {
 
 async function drawPreview(d) {
   const gen = ++mdGen;
-  if (d.mdHtml === undefined) {
+  const table = previewKind(d) === 'table';
+  if ((table ? d.tableData : d.mdHtml) === undefined) {
     try {
-      d.mdReq = d.mdReq || api('/api/markdown', { path: d.path });
-      d.mdHtml = (await d.mdReq).html;
+      d.mdReq = d.mdReq || api(table ? '/api/table' : '/api/markdown', { path: d.path });
+      const j = await d.mdReq;
+      if (table) d.tableData = j; else d.mdHtml = j.html;
     } catch (e) {
       d.mdError = e.message; // this tab falls back to its source
       if (gen === mdGen && mdShown === d) {
@@ -60,8 +72,12 @@ async function drawPreview(d) {
     }
     if (gen !== mdGen || mdShown !== d) return;
   }
-  mdArticle.replaceChildren(mdSanitize(d.mdHtml, d.path));
-  mdEnhance();
+  mdArticle.className = table ? 'csv' : 'md';
+  if (table) mdArticle.replaceChildren(buildTable(d.tableData, d.total));
+  else {
+    mdArticle.replaceChildren(mdSanitize(d.mdHtml, d.path));
+    mdEnhance();
+  }
   mdDrawn = d;
   const target = d.mdAnchor && mdFindAnchor(d.mdAnchor);
   if (target) mdScrollTo(target);
@@ -74,17 +90,17 @@ async function drawPreview(d) {
 
 export function togglePreview() {
   const d = doc_();
-  if (!d || !d.markdown) { showToast('!', 'Preview works on Markdown files'); return; }
+  if (!previewKind(d)) { showToast('!', 'Preview works on Markdown, CSV and TSV files'); return; }
   hideHover();
   if (previewing(d)) {
     const line = mdDrawn === d ? previewTopLine() : 1;
-    mdSetPref(false);
+    mdSetPref(d, false);
     syncPreview();
     sourceToLine(line);
   } else {
     d.mdError = '';
     d.mdLine = sourceTopLine();
-    mdSetPref(true);
+    mdSetPref(d, true);
     syncPreview();
   }
   if (!findbar.hidden) runFind(); else S.find = null;
@@ -92,9 +108,10 @@ export function togglePreview() {
   updateStatus();
 }
 
-function mdSetPref(on) {
-  S.mdPreview = on;
-  try { localStorage.setItem('px0.mdPreview', on ? 'true' : 'false'); } catch {}
+function mdSetPref(d, on) {
+  const table = previewKind(d) === 'table';
+  if (table) S.tablePreview = on; else S.mdPreview = on;
+  try { localStorage.setItem(table ? 'px0.tablePreview' : 'px0.mdPreview', on ? 'true' : 'false'); } catch {}
 }
 
 /* ---------- sanitising ---------- */
@@ -259,8 +276,14 @@ function mdAlert(q) {
 
 const MD_GAP = 16; // space left above a block scrolled into place
 
+/* A table's header row is sticky, so a row placed at the top must clear it. */
+function mdGap() {
+  const head = mdArticle.className === 'csv' && mdArticle.querySelector('thead');
+  return head ? head.getBoundingClientRect().height : MD_GAP;
+}
+
 function mdScrollTo(el) {
-  mdview.scrollTop += el.getBoundingClientRect().top - mdview.getBoundingClientRect().top - MD_GAP;
+  mdview.scrollTop += el.getBoundingClientRect().top - mdview.getBoundingClientRect().top - mdGap();
 }
 
 function mdFindAnchor(anchor) {
@@ -283,15 +306,19 @@ export function previewLine(n) {
     const l = +el.dataset.line;
     if (l <= n && l > at) { best = el; at = l; }
   }
-  if (best) mdScrollTo(best); else mdview.scrollTop = 0;
+  // A table's header row is sticky, so it always measures as already in place.
+  if (best && !best.closest('thead')) mdScrollTo(best); else mdview.scrollTop = 0;
 }
 
 /* Source line of the last block starting at or above the top of the preview,
    counting one that mdScrollTo has just placed there. */
 export function previewTopLine() {
-  const top = mdview.getBoundingClientRect().top + MD_GAP + 8;
+  const top = mdview.getBoundingClientRect().top + mdGap() + 8;
   let line = 1;
-  for (const el of mdArticle.querySelectorAll('[data-line]')) {
+  const blocks = mdArticle.querySelectorAll('[data-line]');
+  // Unscrolled, a table's first row sits just under the header, inside the cutoff.
+  if (mdArticle.className === 'csv' && mdview.scrollTop === 0) return blocks.length ? +blocks[0].dataset.line : 1;
+  for (const el of blocks) {
     if (el.getBoundingClientRect().top > top) break;
     line = +el.dataset.line;
   }
@@ -383,7 +410,13 @@ export function clearPreviewMarks() {
 export function findInPreview(q) {
   clearPreviewMarks();
   if (!q) return 0;
-  const marks = markNodes(mdArticle, q, false, 'mark');
+  // A table's line numbers and cap footer are chrome, not content: no hits there.
+  const marks = markNodes(mdArticle, q, false, 'mark').filter(m => {
+    if (!m.closest('.ln, .csv-cap')) return true;
+    m.replaceWith(...m.childNodes);
+    return false;
+  });
+  if (mdArticle.className === 'csv') mdArticle.normalize();
   for (const m of marks) m.classList.add('md-hit');
   return marks.length;
 }
@@ -422,6 +455,7 @@ export function initMarkdown() {
   });
 
   mdArticle.addEventListener('click', e => {
+    if (e.target.closest('.csv-open-source')) { togglePreview(); return; }
     const copy = e.target.closest('.md-copy');
     if (copy) {
       const pre = $('pre', copy.parentElement);
