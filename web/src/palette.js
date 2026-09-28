@@ -37,8 +37,8 @@ export const COMMANDS = [
   { name: withKeys('Show Call Trail: Callers / Callees ({Alt+Shift+H})'), run: () => showCalls() },
   { name: 'Language Servers: Setup & Manage…', run: () => openLspMenu() },
   { name: 'Set Up Language Server…', run: () => openLspMenu() },
-  { name: 'Toggle Right Inspector (Symbols & References)', run: () => {
-    if (document.body.classList.contains('right-hidden')) showRightInspector('refs');
+  { name: 'Toggle Right Sidebar / Inspector', run: () => {
+    if (document.body.classList.contains('right-hidden')) showRightInspector();
     else hideRightInspector();
   } },
   { name: 'Show File Symbols (Right Panel)', run: () => showRightInspector('symbols') },

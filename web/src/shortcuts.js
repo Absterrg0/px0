@@ -37,7 +37,7 @@ export const SHORTCUTS = [
   [['F12', 'Mod+Click'], 'Go to definition'], [['Shift+F12'], 'Find all references'],
   [['Alt+Shift+H'], 'Call trail (callers / callees)'],
   [['Mod+Shift+M'], 'Show Problems in file'],
-  [['Mod+J'], 'Toggle right inspector (Symbols/Refs)'],
+  [['Mod+J'], 'Toggle right sidebar / inspector'],
   [['Alt+Left', 'Alt+Right'], 'Navigate back / forward'], [['Mod+B'], 'Toggle sidebar'],
   [['Alt+W'], 'Close tab'], [['Alt+Shift+T'], 'Reopen closed tab'], [['Ctrl+Tab'], 'Next tab'],
   [['Alt+1…9'], 'Select tab'], [['Double click'], 'Highlight all occurrences'],
@@ -132,7 +132,7 @@ export function initShortcuts() {
 
     if (mod && (e.key === 'j' || e.key === 'J')) {
       e.preventDefault();
-      if (document.body.classList.contains('right-hidden')) showRightInspector('refs');
+      if (document.body.classList.contains('right-hidden')) showRightInspector();
       else hideRightInspector();
       return;
     }
