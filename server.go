@@ -156,6 +156,7 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc(s.routePath("/api/lsp/calls"), s.handleLSPCalls)
 	s.mux.HandleFunc(s.routePath("/api/lsp/symbols"), s.handleLSPSymbols)
 	s.mux.HandleFunc(s.routePath("/api/lsp/hover"), s.handleLSPHover)
+	s.mux.HandleFunc(s.routePath("/api/lsp/problems"), s.handleLSPProblems)
 	s.mux.HandleFunc(s.routePath("/api/lsp/warm"), s.handleLSPWarm)
 	s.mux.HandleFunc(s.routePath("/api/lsp/setup"), s.handleLSPSetup)
 	s.mux.HandleFunc(s.routePath("/api/lsp/install"), s.handleLSPInstall)
@@ -705,7 +706,7 @@ func (s *Server) handleLSPCalls(w http.ResponseWriter, r *http.Request) {
 // by the time the reader wants to hover or jump, and so the status indicator
 // reflects reality without anyone having to ask a question first.
 func (s *Server) handleLSPWarm(w http.ResponseWriter, r *http.Request) {
-	_, rel, ok := s.resolvePath(r.URL.Query().Get("path"))
+	abs, rel, ok := s.resolvePath(r.URL.Query().Get("path"))
 	if !ok {
 		fail(w, 400, "bad path")
 		return
@@ -720,8 +721,60 @@ func (s *Server) handleLSPWarm(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(ms)*time.Millisecond)
 	defer cancel()
 	// The spawn keeps going even when this call gives up waiting on it.
-	s.lsp.client(ctx, rel)
+	_ = s.lsp.EnsureOpen(ctx, abs, rel)
 	writeJSON(w, s.lspBrief(rel))
+}
+
+func (s *Server) handleLSPProblems(w http.ResponseWriter, r *http.Request) {
+	abs, rel, ok := s.resolvePath(r.URL.Query().Get("path"))
+	if !ok {
+		fail(w, 400, "bad path")
+		return
+	}
+	ms, _ := strconv.Atoi(r.URL.Query().Get("wait"))
+	if ms < 0 {
+		ms = 0
+	}
+	if ms > 10000 {
+		ms = 10000
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(ms)*time.Millisecond)
+	defer cancel()
+
+	probs, err := s.lsp.Problems(ctx, abs, rel, ms)
+	state, srv := s.lsp.State(rel)
+
+	counts := map[string]int{
+		"error":   0,
+		"warning": 0,
+		"info":    0,
+		"hint":    0,
+		"total":   len(probs),
+	}
+	for _, p := range probs {
+		switch p.SeverityNum {
+		case 1:
+			counts["error"]++
+		case 2:
+			counts["warning"]++
+		case 3:
+			counts["info"]++
+		case 4:
+			counts["hint"]++
+		}
+	}
+
+	resp := map[string]any{
+		"path":     rel,
+		"problems": probs,
+		"counts":   counts,
+		"state":    string(state),
+		"server":   srv,
+	}
+	if err != nil && err != context.DeadlineExceeded && err != context.Canceled {
+		resp["error"] = err.Error()
+	}
+	writeJSON(w, resp)
 }
 
 func (s *Server) handleLSPHover(w http.ResponseWriter, r *http.Request) {
@@ -1478,6 +1531,9 @@ func (s *Server) handleReindex(w http.ResponseWriter, r *http.Request) {
 	s.ix.Build()
 	if s.gitWatcher != nil {
 		s.gitWatcher.Trigger()
+	}
+	if s.lsp != nil {
+		s.lsp.RefreshOpenDocs()
 	}
 	n, _, ms := s.ix.Stats()
 	gitCount, gitFiles := s.ix.GitChanges()

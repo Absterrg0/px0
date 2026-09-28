@@ -503,6 +503,63 @@ func (m *lspManager) CloseDoc(abs, rel string) {
 	}
 }
 
+func (m *lspManager) EnsureOpen(ctx context.Context, abs, rel string) error {
+	c, err := m.client(ctx, rel)
+	if err != nil {
+		return err
+	}
+	return c.ensureOpen(abs, rel)
+}
+
+func (m *lspManager) SyncDoc(abs, rel string) error {
+	def := m.defFor(rel)
+	if def == nil {
+		return nil
+	}
+	m.mu.Lock()
+	c := m.clients[def.Name]
+	m.mu.Unlock()
+	if c != nil {
+		return c.syncDoc(abs, rel)
+	}
+	return nil
+}
+
+func (m *lspManager) RefreshOpenDocs() {
+	m.mu.Lock()
+	clients := make([]*lspClient, 0, len(m.clients))
+	for _, c := range m.clients {
+		clients = append(clients, c)
+	}
+	m.mu.Unlock()
+
+	for _, c := range clients {
+		c.mu.Lock()
+		opened := make([]string, 0, len(c.opened))
+		for uri := range c.opened {
+			opened = append(opened, uri)
+		}
+		c.mu.Unlock()
+
+		for _, uri := range opened {
+			abs, err := uriToPath(uri)
+			if err != nil {
+				continue
+			}
+			if _, err := os.Stat(abs); os.IsNotExist(err) {
+				c.closeDoc(abs)
+				continue
+			}
+			rel, err := filepath.Rel(m.root, abs)
+			if err != nil {
+				rel = abs
+			}
+			rel = filepath.ToSlash(rel)
+			_ = c.syncDoc(abs, rel)
+		}
+	}
+}
+
 func (m *lspManager) Close() {
 	m.mu.Lock()
 	clients := make([]*lspClient, 0, len(m.clients))

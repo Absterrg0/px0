@@ -4,10 +4,14 @@
 // side-by-side split layout (default) or a single-column unified layout.
 // Unlike the code viewport this is not virtualized -- a file's own diff is
 // bounded in size, so a plain DOM render is simple and fast enough.
-import { $, S, doc_, esc, api } from './state.js';
+import { $, S, doc_, esc, api, MOD } from './state.js';
 import { on } from './bus.js';
 import { syncPreview } from './markdown.js';
 import { setStatusNote, updateStatus } from './status.js';
+import { wordAtPoint } from './cursor.js';
+import { gotoDefinition } from './lsp.js';
+import { hoverAt } from './hover.js';
+import { pushHistory } from './history.js';
 
 export const diffview = $('#diffview');
 const diffContent = $('#diffcontent');
@@ -110,6 +114,20 @@ async function drawDiff(d, force = false) {
   if (d.diffScroll) {
     diffview.scrollTop = d.diffScroll;
     d.diffScroll = 0;
+  } else if (d.cur) {
+    scrollDiffToLine(d.cur);
+  }
+}
+
+export function scrollDiffToLine(line) {
+  if (!diffview || !line) return;
+  const row = diffview.querySelector(`[data-l="${line}"]`) ||
+              diffview.querySelector(`[data-at="${line}"]`) ||
+              diffview.querySelector(`[data-old-l="${line}"]`);
+  if (row) {
+    row.scrollIntoView({ block: 'center', behavior: 'auto' });
+    row.classList.add('diff-row-flash');
+    setTimeout(() => row.classList.remove('diff-row-flash'), 1200);
   }
 }
 
@@ -376,7 +394,15 @@ function lineCell(n, reviewable = true) {
   el.className = 'diff-ln';
   if (n !== '' && n !== undefined) {
     el.classList.add('diff-ln-nav');
-    el.title = 'Open in file view at line ' + n;
+    let title = 'Open in file view at line ' + n;
+    const d = doc_();
+    if (d && d.problemsByLine && d.problemsByLine.has(+n)) {
+      const pList = d.problemsByLine.get(+n);
+      const worst = pList[0].severityNum;
+      el.classList.add(worst === 1 ? 'prob-err' : (worst === 2 ? 'prob-warn' : 'prob-info'));
+      title += ' · ' + pList.map(p => p.message).join(' • ');
+    }
+    el.title = title;
     const btn = document.createElement('span');
     btn.className = 'line-btn';
     btn.setAttribute('role', 'button');
@@ -424,18 +450,54 @@ export function initDiff() {
     if (line && sourceJumpHandler) sourceJumpHandler(line);
     else setDiffMode('source');
   });
+  diffContent.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    if (e.target.closest('.line-btn') || e.target.closest('.diff-ln-nav')) return;
+    const diffCode = e.target.closest('.diff-code');
+    if (!diffCode) return;
+    const w = wordAtPoint(e.clientX, e.clientY);
+    if (!w) return;
+    S.at = w;
+    S.lastWord = w.word;
+    const d = doc_();
+    if (e[MOD]) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (d) pushHistory(d.path, w.line);
+      const targetView = e.altKey ? 'diff' : 'source';
+      gotoDefinition(w, { view: targetView });
+      return;
+    }
+  });
+
   // Clicking a line number jumps straight to the full file at that line --
   // the diff shows what changed, but reading it usually means seeing it in
-  // context, not just the hunk.
+  // context, not just the hunk. Clicking a symbol highlights and opens hover actions.
   diffContent.addEventListener('click', e => {
     if (e.target.closest('.line-btn')) return;
     const cell = e.target.closest('.diff-ln-nav');
-    if (!cell) return;
-    const rowEl = cell.closest('[data-l], [data-at]');
-    if (!rowEl || !sourceJumpHandler) return;
-    e.stopPropagation();
-    const line = rowEl.dataset.l !== undefined ? +rowEl.dataset.l : +rowEl.dataset.at;
-    sourceJumpHandler(line);
+    if (cell) {
+      const rowEl = cell.closest('[data-l], [data-at]');
+      if (!rowEl || !sourceJumpHandler) return;
+      e.stopPropagation();
+      const line = rowEl.dataset.l !== undefined ? +rowEl.dataset.l : +rowEl.dataset.at;
+      sourceJumpHandler(line);
+      return;
+    }
+    const diffCode = e.target.closest('.diff-code');
+    if (diffCode && !e[MOD]) {
+      const w = wordAtPoint(e.clientX, e.clientY);
+      if (w) {
+        S.at = w;
+        S.lastWord = w.word;
+        hoverAt(e.clientX, e.clientY);
+      }
+    }
+  });
+
+  diffContent.addEventListener('dblclick', e => {
+    const w = wordAtPoint(e.clientX, e.clientY);
+    if (w) { S.at = w; S.lastWord = w.word; }
   });
   $('#diff-btn')?.addEventListener('click', e => {
     e.stopPropagation();

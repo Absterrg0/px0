@@ -13,7 +13,8 @@ import { clearLink } from './hover.js';
 import { clearFind } from './find.js';
 import { clearSelectAll } from './selbar.js';
 import { syncPreview, previewing, previewLine } from './markdown.js';
-import { syncDiffView, layoutPref, diffScrollTop, setDiffMode, setSourceJumpHandler } from './diff.js';
+import { updateProblemsBadge, renderProblemsPane } from './problems.js';
+import { syncDiffView, layoutPref, diffScrollTop, setDiffMode, setSourceJumpHandler, scrollDiffToLine } from './diff.js';
 import { syncImageView } from './imageview.js';
 
 // Recently closed files, newest last, for Alt+Shift+T.
@@ -67,7 +68,13 @@ function openTabMenu(index, x, y) {
 }
 
 export async function openFile(path, opts = {}) {
-  const { line, push = true, col } = opts;
+  const { line, push = true, col, view } = opts;
+  const prev = doc_();
+  const sourceSelected = prev ? !prev.diffMode : false;
+  const diffSelected = prev ? !!prev.diffMode : false;
+  const wantsDiff = view === 'diff';
+  const wantsSource = view === 'source' || (sourceSelected && !wantsDiff);
+
   let idx = S.tabs.findIndex(t => t.path === path);
   if (idx < 0) {
     let j;
@@ -80,6 +87,31 @@ export async function openFile(path, opts = {}) {
     }
     const isImg = !!j.image;
     const hasDiff = !isImg && !!j.diffAvailable;
+
+    let initialDiffMode = null;
+    let initialOpenedInDiff = false;
+    let initialDismissed = false;
+
+    if (hasDiff) {
+      if (wantsSource) {
+        initialDiffMode = null;
+        initialDismissed = true;
+        initialOpenedInDiff = false;
+      } else if (wantsDiff) {
+        initialDiffMode = layoutPref() || 'split';
+        initialDismissed = false;
+        initialOpenedInDiff = true;
+      } else if (treeEl?.classList.contains('changed-only') || diffSelected) {
+        initialDiffMode = layoutPref() || 'split';
+        initialDismissed = false;
+        initialOpenedInDiff = true;
+      } else {
+        initialDiffMode = null;
+        initialDismissed = false;
+        initialOpenedInDiff = false;
+      }
+    }
+
     const d = {
       path, name: path.split('/').pop(), lang: isImg ? 'image' : j.lang,
       total: isImg ? 0 : j.total, maxCols: isImg ? 0 : j.maxCols,
@@ -88,10 +120,10 @@ export async function openFile(path, opts = {}) {
       pending: new Set(), refining: new Set(), scrollTop: 0, cur: line || 1,
       outline: null, gen: 0, markdown: !isImg && !!j.markdown, table: !isImg && !!j.table, isImage: isImg,
       gutter: null,
-      diffMode: hasDiff ? (layoutPref() || 'split') : null,
+      diffMode: initialDiffMode,
       diffAvailable: hasDiff,
-      diffDismissed: false,
-      openedInDiffView: hasDiff,
+      diffDismissed: initialDismissed,
+      openedInDiffView: initialOpenedInDiff,
     };
     if (!isImg) {
       for (let i = 0; i < j.lines.length; i++) d.lines[j.start + i] = j.lines[i];
@@ -102,15 +134,28 @@ export async function openFile(path, opts = {}) {
     if (!isImg && j.refine) refineChunk(d, start / CHUNK);
     if (!isImg) loadGutter(d);
   }
-  const prev = doc_();
   if (prev && prev !== S.tabs[idx]) prev.scrollTop = vp.scrollTop;
   if (prev !== S.tabs[idx]) { clearSelectAll(); clearFind(); }
   S.active = idx;
   const d = S.tabs[idx];
-  if (d && d.diffAvailable && (treeEl?.classList.contains('changed-only') || (!d.diffDismissed && d.diffMode === null))) {
-    d.diffMode = layoutPref() || 'split';
-    d.diffDismissed = false;
-    d.openedInDiffView = true;
+  if (d) {
+    if (wantsSource) {
+      d.diffMode = null;
+      d.diffDismissed = true;
+      d.openedInDiffView = false;
+    } else if (wantsDiff) {
+      if (d.diffAvailable) {
+        d.diffMode = layoutPref() || 'split';
+        d.diffDismissed = false;
+        d.openedInDiffView = true;
+      } else {
+        d.diffMode = null;
+        setStatusNote('No diff for ' + d.name + ' — showing source', 3000);
+      }
+    } else if (d.diffAvailable && !d.diffDismissed && d.diffMode === null && (treeEl?.classList.contains('changed-only') || diffSelected)) {
+      d.diffMode = layoutPref() || 'split';
+      d.openedInDiffView = true;
+    }
   }
 
   $('#empty').hidden = true;
@@ -124,10 +169,17 @@ export async function openFile(path, opts = {}) {
   warmLSP(d);
   drawTabs(); drawCrumbs(); layout();
 
-  if (line) { d.cur = line; centerLine(line); }
-  else vp.scrollTop = d.scrollTop;
+  if (line) {
+    d.cur = line;
+    if (d.diffMode) scrollDiffToLine(line);
+    else centerLine(line);
+  } else if (!d.diffMode) {
+    vp.scrollTop = d.scrollTop;
+  }
   render();
   updateStatus();
+  updateProblemsBadge(d);
+  if ($('#pane-right-problems')?.classList.contains('active')) renderProblemsPane();
   if ($('#panel-outline')?.classList.contains('active')) loadOutline();
   if (push) pushHistory(path, line || d.cur);
   saveWorkspaceState();
@@ -144,9 +196,8 @@ export async function loadGutter(d) {
   try {
     const j = await api('/api/gutter', { path: d.path });
     d.diffAvailable = !!j.available;
-    if (j.available && d.diffMode === null && !d.diffDismissed) {
+    if (j.available && d.diffMode === null && !d.diffDismissed && d.openedInDiffView) {
       d.diffMode = layoutPref() || 'split';
-      d.openedInDiffView = true;
       if (doc_() === d) {
         syncDiffView();
         syncPreview();
@@ -163,6 +214,7 @@ export async function loadGutter(d) {
     if (doc_() === d) {
       updateStatus();
       render();
+      if ($('#pane-right-problems')?.classList.contains('active')) renderProblemsPane();
     }
     drawTabs();
   } catch {}
@@ -271,6 +323,10 @@ export async function reloadOpenTabs({ onlyIfChanged = false } = {}) {
   // Load all gutters concurrently before initial paint
   await Promise.allSettled(S.tabs.filter(t => !t.isImage).map(t => loadGutter(t)));
 
+  for (const t of S.tabs) {
+    t.problemsLoaded = false;
+  }
+
   const d = doc_();
   if (d) {
     S.lsp.state = (d.lsp && d.lsp.state) || 'off';
@@ -283,6 +339,8 @@ export async function reloadOpenTabs({ onlyIfChanged = false } = {}) {
     layout();
     vp.scrollTop = d.scrollTop;
     render();
+    updateProblemsBadge(d);
+    if ($('#pane-right-problems')?.classList.contains('active')) renderProblemsPane();
     if ($('#panel-outline')?.classList.contains('active')) loadOutline();
   }
 
@@ -407,11 +465,6 @@ export function switchTab(i) {
   if (prev) prev.scrollTop = vp.scrollTop;
   S.active = i;
   const curDoc = S.tabs[i];
-  if (curDoc && curDoc.diffAvailable && (treeEl?.classList.contains('changed-only') || (!curDoc.diffDismissed && curDoc.diffMode === null))) {
-    curDoc.diffMode = layoutPref() || 'split';
-    curDoc.diffDismissed = false;
-    curDoc.openedInDiffView = true;
-  }
   syncImageView();
   syncPreview();
   syncDiffView();
@@ -425,6 +478,8 @@ export function switchTab(i) {
   drawTabs(); drawCrumbs(); layout();
   vp.scrollTop = S.tabs[i].scrollTop;
   render(); updateStatus();
+  updateProblemsBadge(S.tabs[i]);
+  if ($('#pane-right-problems')?.classList.contains('active')) renderProblemsPane();
   if ($('#panel-outline')?.classList.contains('active')) loadOutline();
   pushHistory(S.tabs[i].path, S.tabs[i].cur);
   saveWorkspaceState();

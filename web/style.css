@@ -501,6 +501,88 @@ body.right-hidden #right-side, body.right-hidden #right-resizer { display: none;
 .cnode .car.cyc { cursor: default; font-size: 11px; }
 .cnone { padding-block: 1px; padding-right: 10px; font-size: 11px; font-style: italic; color: var(--faint); }
 
+/* Problems Tab and Pane */
+.prob-tab-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 14px; height: 14px; padding: 0 4px; margin-left: 5px;
+  font-size: 9px; font-weight: 700; line-height: 1; border-radius: 7px;
+  vertical-align: middle;
+}
+.prob-tab-badge.prob-badge-error { background: var(--err); color: #fff; }
+.prob-tab-badge.prob-badge-warning { background: var(--warn, #e5a50a); color: #111; }
+.prob-tab-badge.prob-badge-info { background: var(--bg4); color: var(--fg); }
+
+.prob-bar { gap: 6px; }
+.prob-filters { display: flex; gap: 3px; }
+.prob-body { padding: 4px 0; overflow-y: auto; }
+
+.prob-section-head {
+  padding: 6px 12px 3px; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint);
+  border-bottom: 1px solid var(--line); margin-top: 4px;
+}
+.prob-section-head:first-child { margin-top: 0; }
+
+.prob-item {
+  padding: 7px 12px; border-bottom: 1px solid var(--line);
+  cursor: pointer; transition: background 0.1s ease;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.prob-item:hover { background: var(--bg2); }
+
+.prob-item-head {
+  display: flex; align-items: center; gap: 6px; font-size: 11px; flex-wrap: wrap;
+}
+.prob-chip {
+  font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: var(--r);
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.prob-chip-error { background: color-mix(in srgb, var(--err) 18%, transparent); color: var(--err); border: 1px solid var(--err); }
+.prob-chip-warning { background: color-mix(in srgb, var(--warn, #e5a50a) 18%, transparent); color: var(--warn, #e5a50a); border: 1px solid var(--warn, #e5a50a); }
+.prob-chip-info { background: var(--bg3); color: var(--dim); border: 1px solid var(--line); }
+
+.prob-badge-changed {
+  font-size: 10px; font-weight: 600; padding: 1px 5px; border-radius: var(--r);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-fg); border: 1px solid var(--accent);
+}
+.prob-loc { font-family: var(--mono); color: var(--dim); font-size: 11px; }
+.prob-code { font-family: var(--mono); color: var(--faint); font-size: 11px; margin-left: auto; }
+
+.prob-msg {
+  font-family: var(--mono); font-size: 12px; line-height: 1.45;
+  color: var(--fg); white-space: pre-wrap; word-break: break-word;
+}
+
+.prob-related-list {
+  display: flex; flex-direction: column; gap: 2px; margin-top: 2px;
+  padding-left: 8px; border-left: 2px solid var(--line);
+}
+.prob-related-item {
+  font-size: 11px; color: var(--dim); cursor: pointer;
+}
+.prob-related-item:hover { color: var(--accent-fg); }
+.prob-related-target {
+  font-family: var(--mono); text-decoration: underline; color: var(--accent-fg);
+}
+.prob-related-msg { color: var(--faint); }
+
+.prob-hint { padding: 16px 12px; line-height: 1.5; }
+.prob-clean { color: var(--gi); display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.prob-clean-icon {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: color-mix(in srgb, var(--gi) 15%, transparent);
+  border: 1px solid var(--gi); display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 14px;
+}
+.prob-err-msg { color: var(--err); }
+.prob-spinner {
+  display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--dim); border-top-color: var(--accent);
+  animation: prob-spin 0.8s linear infinite; margin-right: 6px; vertical-align: middle;
+}
+@keyframes prob-spin { to { transform: rotate(360deg); } }
+
 /* ---------- main ---------- */
 #main { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
 /* View-mode switches (Markdown Preview/Source, git Diff), pinned to the right
@@ -726,6 +808,24 @@ body.word-wrap .c { white-space: pre-wrap; word-break: break-word; overflow-wrap
   border-top: 3px solid transparent; border-bottom: 3px solid transparent;
 }
 
+/* Gutter problem markers */
+.g.prob-err::before, .g.prob-warn::before, .g.prob-info::before {
+  content: ""; position: absolute; right: 3px; top: 50%; transform: translateY(-50%);
+  width: 5px; height: 5px; border-radius: 50%; z-index: 3; pointer-events: none;
+}
+.g.prob-err::before { background: var(--err); box-shadow: 0 0 3px var(--err); }
+.g.prob-warn::before { background: var(--warn, #e5a50a); }
+.g.prob-info::before { background: var(--accent); }
+
+/* Diff gutter problem markers */
+.diff-ln.prob-err::before, .diff-ln.prob-warn::before, .diff-ln.prob-info::before {
+  content: ""; position: absolute; right: 3px; top: 50%; transform: translateY(-50%);
+  width: 5px; height: 5px; border-radius: 50%; z-index: 3; pointer-events: none;
+}
+.diff-ln.prob-err::before { background: var(--err); box-shadow: 0 0 3px var(--err); }
+.diff-ln.prob-warn::before { background: var(--warn, #e5a50a); }
+.diff-ln.prob-info::before { background: var(--accent); }
+
 .row mark { background: var(--mark); color: inherit; border-radius: 2px; padding: 1px 0; }
 /* The current match is a solid fill, so syntax colours on it are unreadable. */
 .row mark.on, .row mark.on * { background: var(--mark-active); color: var(--on-mark-active); }
@@ -741,7 +841,15 @@ body.word-wrap .c { white-space: pre-wrap; word-break: break-word; overflow-wrap
   text-underline-offset: 3px;
   cursor: pointer;
 }
-#viewport.linking, #viewport.linking * { cursor: pointer; }
+#viewport.linking, #viewport.linking *, #diffview.linking, #diffview.linking * { cursor: pointer; }
+
+@keyframes diffFlash {
+  0% { background-color: rgba(255, 215, 0, 0.35); }
+  100% { background-color: transparent; }
+}
+.diff-row-flash {
+  animation: diffFlash 1.2s ease-out;
+}
 
 /* ---------- hover card ---------- */
 #hovercard {
@@ -754,7 +862,7 @@ body.word-wrap .c { white-space: pre-wrap; word-break: break-word; overflow-wrap
 #hovercard .sig {
   font: var(--fs)/1.55 var(--mono); white-space: pre-wrap; word-break: break-word;
   padding: 9px 12px; background: var(--bg); border-bottom: 1px solid var(--line);
-  max-height: 190px; overflow: hidden;
+  max-height: 190px; overflow-y: auto; overflow-x: hidden;
 }
 #hovercard .sig i { font-style: normal; }
 #hovercard .sig .k{color:var(--k)} #hovercard .sig .kt{color:var(--kt)}
@@ -767,10 +875,10 @@ body.word-wrap .c { white-space: pre-wrap; word-break: break-word; overflow-wrap
 #hovercard .sig .c{color:var(--c);font-style:normal}
 #hovercard .doc {
   padding: 9px 12px; font-size: 12.5px; line-height: 1.55; color: var(--dim);
-  white-space: pre-wrap; max-height: 200px; overflow: hidden;
+  white-space: pre-wrap; max-height: 200px; overflow-y: auto; overflow-x: hidden;
 }
 #hovercard .actions {
-  display: flex; gap: 6px; padding: 6px 10px; background: var(--bg2);
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 10px; background: var(--bg2);
   border-top: 1px solid var(--line); align-items: center;
 }
 #hovercard .actions button {
