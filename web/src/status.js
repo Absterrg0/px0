@@ -130,13 +130,13 @@ function shortLang(lang) {
 
 const lspMenuEl = $('#lsp-menu');
 let lastLspData = null;
-let pollTimer = null;
+let lspPollTimer = null;
 let pollActive = false;
 const installingServers = new Set();
 
 export function startLspPoll() {
-  if (pollTimer) return;
-  pollTimer = setInterval(async () => {
+  if (lspPollTimer) return;
+  lspPollTimer = setInterval(async () => {
     if (pollActive) return;
     pollActive = true;
     try {
@@ -166,8 +166,8 @@ export function startLspPoll() {
 
         const anyInstalling = (data.servers || []).some(s => s.state === 'installing');
         if (!anyInstalling && installingServers.size === 0) {
-          clearInterval(pollTimer);
-          pollTimer = null;
+          clearInterval(lspPollTimer);
+          lspPollTimer = null;
         }
       }
     } catch {}
