@@ -8,7 +8,7 @@
 
 px0 is an IDE built for reviewing AI-generated code, optimized for speed. It turns your browser into a zero-latency console with native Git and GitHub integrations, instant search across massive codebases, and seamless handoff to local AI coding harnesses.
 
-As AI agents author more code directly from the terminal, engineering productivity is no longer constrained by how fast you type—it is constrained by how fast you can review, navigate, and verify changes. px0 replaces heavy, multi-gigabyte editing suites with an instant, distraction-free environment built specifically for this review loop.
+As AI agents author more code directly from the terminal, engineering productivity is no longer constrained by how fast you type - it is constrained by how fast you can review, navigate, and verify changes. px0 replaces heavy, multi-gigabyte editing suites with an instant, distraction-free environment built specifically for this review loop.
 
 - < 1 ms cold start
 - ~20–30 MB server daemon RAM (~100–180 MB total with browser tab, vs. VS Code's ~1,440 MB)
@@ -131,7 +131,7 @@ make build
 
 ## Design Partners
 
-When AI coding agents generate large diffs across repositories daily, code authoring is no longer the bottleneck—verification and review is.
+When AI coding agents generate large diffs across repositories every day, code authoring is no longer the bottleneck. Verification and review are.
 
 We are looking for engineering teams (10+ engineers or teams running active agent workflows) as design partners. Partners receive direct Slack Connect access to the core team, rapid turnaround on custom harness integrations, and direct input on the roadmap.
 
