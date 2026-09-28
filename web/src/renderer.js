@@ -94,7 +94,7 @@ export function paint() {
     }
     const gTitleAttr = probTitle ? ' title="' + probTitle + '"' : '';
     html += '<div class="' + rc + '" data-l="' + n + '">' +
-      '<div class="' + gc + '"' + gTitleAttr + '><span class="line-btn" role="button" data-l="' + n + '" title="Thread and line actions"></span>' + n + '</div><div class="c">' + (body === undefined ? '' : body) + '</div></div>';
+      '<div class="' + gc + '"' + gTitleAttr + '><span class="line-btn" role="button" data-l="' + n + '" title="Thread and line actions">Edit</span>' + n + '</div><div class="c">' + (body === undefined ? '' : body) + '</div></div>';
   }
   const sel = saveSelection();
   rowsEl.style.transform = 'translateY(' + (first * LH) + 'px)';

@@ -407,6 +407,7 @@ function lineCell(n, reviewable = true) {
     btn.className = 'line-btn';
     btn.setAttribute('role', 'button');
     btn.title = (S.meta?.pr && reviewable) ? 'Thread, review comment and line actions' : 'Thread and line actions';
+    btn.textContent = 'Edit';
     el.append(btn);
   }
   el.append(document.createTextNode(n === '' || n === undefined ? '' : String(n)));

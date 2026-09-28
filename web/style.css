@@ -756,23 +756,29 @@ body.md-tab.diff-tab #tabs { padding-right: 395px; }
 .row.agent-sel .g { color: var(--accent); font-weight: 600; }
 .row.agent-sel.cur,
 .row.agent-sel.cur .c { background: var(--sel); }
+/* Pinned flush to the gutter's own left edge, capped at its width (never
+   past .g's/.diff-ln's right edge, so it can never cover .c/the code). The
+   label is fixed text ("Edit"), often wider than a narrow gutter --
+   rather than spill either edge, it self-ellipsizes via text-overflow. */
 .line-btn {
   position: absolute;
-  left: 2px;
+  left: 0;
   top: 50%;
   transform: translateY(-50%);
-  width: 14px;
-  height: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  line-height: 1;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 7px;
+  font: 600 10px var(--ui);
+  letter-spacing: .01em;
+  line-height: 1.4;
   color: var(--fg);
   background: var(--bg4);
   border: 1px solid var(--line);
   border-radius: var(--r);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
   opacity: 0;
   pointer-events: none;
   cursor: pointer;
@@ -784,12 +790,6 @@ body.md-tab.diff-tab #tabs { padding-right: 395px; }
 .diff-side:hover .line-btn {
   opacity: 1;
   pointer-events: auto;
-}
-/* The thread (speech bubble) glyph, drawn as a mask so it takes the button's colour. */
-.line-btn::before {
-  content: ""; width: 10px; height: 10px; background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-5.4A8 8 0 1 1 21 12z'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-5.4A8 8 0 1 1 21 12z'/%3E%3C/svg%3E") center / contain no-repeat;
 }
 .line-btn:hover {
   opacity: 1 !important;
@@ -1016,7 +1016,7 @@ body.word-wrap .c { white-space: pre-wrap; word-break: break-word; overflow-wrap
   color: var(--faint); user-select: none; font-variant-numeric: tabular-nums;
 }
 /* A line number doubles as "open this line in the full file" -- cursor and
-   hover color are the only cue, the pencil icon already owns the gutter's
+   hover color are the only cue, the line-btn already owns the gutter's
    hover space for comment/edit. */
 .diff-ln-nav { cursor: pointer; }
 .diff-ln-nav:hover { color: var(--fg); text-decoration: underline; }
