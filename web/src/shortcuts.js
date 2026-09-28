@@ -12,7 +12,7 @@ import { showRightInspector, hideRightInspector } from './inspector.js';
 import { overlay, openPalette, closePalette } from './palette.js';
 import { moveCursor, moveCol, moveWord, caretToEdge } from './cursor.js';
 import { showCalls } from './calls.js';
-import { SEL_KEYS, runSelectionAction, selectAll, clearSelectAll, copySelectAll } from './selbar.js';
+import { SEL_KEYS, runSelectionAction, selectAll, clearSelectAll, copySelectAll, getSelectedRangeInfo } from './selbar.js';
 
 import { cycleTheme } from './theme.js';
 import { previewing, togglePreview, previewKey, selectPreview } from './markdown.js';
@@ -42,6 +42,7 @@ export const SHORTCUTS = [
   [['Alt+W'], 'Close tab'], [['Alt+Shift+T'], 'Reopen closed tab'], [['Ctrl+Tab'], 'Next tab'],
   [['Alt+1…9'], 'Select tab'], [['Double click'], 'Highlight all occurrences'],
   [['Mod+A'], 'Select whole file'],
+  [['Mod+C'], 'Copy selection (source / formatted text)'],
   [['Alt+C', 'Alt+A'], 'Copy selection ref / with context'], [['Alt+U'], 'Find usages of selection'],
   [['Alt+E'], 'Edit selection inline'],
   [['Alt+T'], 'Start a thread on the selection'],
@@ -204,7 +205,15 @@ export function initShortcuts() {
     // Select all takes the open file only, never the sidebar or status bar around it.
     const plainMod = mod && !e.shiftKey && !e.altKey;
     if (plainMod && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); if (previewing()) selectPreview(); else selectAll(); return; }
-    if (plainMod && (e.key === 'c' || e.key === 'C') && copySelectAll()) { e.preventDefault(); return; }
+    if (plainMod && (e.key === 'c' || e.key === 'C')) {
+      if (copySelectAll()) { e.preventDefault(); return; }
+      const info = getSelectedRangeInfo();
+      if (info) {
+        e.preventDefault();
+        runSelectionAction(info.isMarkdownPreview ? 'copy-preview-text' : 'copy-source');
+        return;
+      }
+    }
 
     if (handleVimKeyDown(e)) return;
 

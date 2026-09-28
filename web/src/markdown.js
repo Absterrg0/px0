@@ -507,9 +507,206 @@ export function initMarkdown() {
       }
     });
   }
+  const copyMdBtn = $('#btn-copy-md');
+  if (copyMdBtn) {
+    copyMdBtn.addEventListener('click', () => copyFullMarkdown(copyMdBtn));
+  }
+
   on('tab:activated', () => syncPreview());
   on('tabs:cleared', () => syncPreview());
 }
+
+export function getDocRaw(d) {
+  if (!d) return Promise.resolve('');
+  if (d.rawText !== undefined) return Promise.resolve(d.rawText);
+  if (!d.rawTextPromise) {
+    const rawUrl = new URL('api/raw?path=' + encodeURIComponent(d.path), document.baseURI || location.href).href;
+    d.rawTextPromise = fetch(rawUrl)
+      .then(r => { if (!r.ok) throw new Error(r.statusText); return r.text(); })
+      .then(t => { d.rawText = t; return t; })
+      .catch(e => { d.rawTextPromise = null; throw e; });
+  }
+  return d.rawTextPromise;
+}
+
+export async function copyFullMarkdown(btn = null) {
+  const d = doc_();
+  if (!d) return;
+  const trigger = btn || $('#btn-copy-md');
+  try {
+    const raw = await getDocRaw(d);
+    const lineCount = raw.split('\n').length;
+    copyToClipboard(raw, `Copied ${d.name} (${lineCount.toLocaleString()} lines)`, trigger);
+  } catch (err) {
+    showToast('!', 'Failed to read markdown: ' + err.message);
+  }
+}
+
+export function getFragmentPlainText(frag) {
+  const clone = frag.cloneNode(true);
+  const bad = clone.querySelectorAll?.('.md-copy, .line-btn, [hidden], svg, style, script');
+  if (bad) {
+    for (const b of bad) b.remove();
+  }
+  return (clone.textContent || '').replace(/\r\n/g, '\n');
+}
+
+export function getFragmentHtml(frag) {
+  const clone = frag.cloneNode(true);
+  const bad = clone.querySelectorAll?.('.md-copy, .line-btn, [hidden]');
+  if (bad) {
+    for (const b of bad) b.remove();
+  }
+  const div = document.createElement('div');
+  div.appendChild(clone);
+  return div.innerHTML;
+}
+
+export function getMarkdownRangeLines(range) {
+  let l1 = 0, l2 = 0;
+  const blocks = mdArticle.querySelectorAll('[data-line]');
+  for (const b of blocks) {
+    if (range.intersectsNode(b)) {
+      const line = +b.dataset.line;
+      if (!l1 || line < l1) l1 = line;
+      if (line > l2) l2 = line;
+    }
+  }
+  return { l1: l1 || 1, l2: l2 || l1 || 1 };
+}
+
+export function domToMarkdown(node) {
+  if (!node) return '';
+  if (node.nodeType === 3) return node.nodeValue;
+  if (node.nodeType !== 1 && node.nodeType !== 11) return '';
+
+  if (node.matches && (node.matches('.md-copy, .line-btn, [hidden], svg') || node.classList?.contains('md-copy'))) {
+    return '';
+  }
+
+  const tag = node.nodeType === 1 ? node.tagName.toLowerCase() : '';
+
+  if (tag === 'div' && node.classList.contains('md-pre')) {
+    const pre = node.querySelector('pre') || node;
+    const lang = node.dataset.lang || pre.dataset.lang || '';
+    const code = (node.querySelector('code') || pre).textContent || '';
+    return '\n```' + lang + '\n' + code.replace(/\r\n/g, '\n').trimEnd() + '\n```\n\n';
+  }
+
+  if (tag === 'pre') {
+    const lang = node.dataset.lang || node.closest('.md-pre')?.dataset.lang || '';
+    const code = (node.querySelector('code') || node).textContent || '';
+    return '\n```' + lang + '\n' + code.replace(/\r\n/g, '\n').trimEnd() + '\n```\n\n';
+  }
+
+  if (/^h[1-6]$/.test(tag)) {
+    const level = parseInt(tag[1], 10);
+    const hashes = '#'.repeat(level);
+    return '\n' + hashes + ' ' + innerDomToMarkdown(node).trim() + '\n\n';
+  }
+
+  if (tag === 'blockquote') {
+    let alertType = '';
+    for (const c of (node.className || '').split(/\s+/)) {
+      if (c.startsWith('md-alert-')) {
+        alertType = c.slice('md-alert-'.length).toUpperCase();
+        break;
+      }
+    }
+    let body = innerDomToMarkdown(node).trim();
+    if (alertType) body = `[!${alertType}]\n` + body;
+    const lines = body.split('\n').map(l => '> ' + l).join('\n');
+    return '\n' + lines + '\n\n';
+  }
+
+  if (tag === 'p') {
+    if (node.classList.contains('md-alert-title')) return '';
+    return innerDomToMarkdown(node).trim() + '\n\n';
+  }
+
+  if (tag === 'ul' || tag === 'ol') {
+    let idx = 1;
+    let out = '\n';
+    for (const child of node.children) {
+      if (child.tagName.toLowerCase() === 'li') {
+        const prefix = tag === 'ol' ? `${idx++}. ` : '- ';
+        let item = innerDomToMarkdown(child).trim();
+        item = item.split('\n').map((l, i) => i === 0 ? l : '  ' + l).join('\n');
+        out += prefix + item + '\n';
+      }
+    }
+    return out + '\n';
+  }
+
+  if (tag === 'li') {
+    let check = '';
+    const cb = node.querySelector('input[type="checkbox"]');
+    if (cb) check = cb.checked ? '[x] ' : '[ ] ';
+    return check + innerDomToMarkdown(node).trim();
+  }
+
+  if (tag === 'table') {
+    const trs = [...node.querySelectorAll('tr')];
+    if (!trs.length) return '';
+    let out = '\n';
+    let isHeader = true;
+    for (const tr of trs) {
+      const cells = [...tr.children].filter(c => /^t[hd]$/i.test(c.tagName));
+      if (!cells.length) continue;
+      const row = '| ' + cells.map(c => innerDomToMarkdown(c).trim().replace(/\|/g, '\\|').replace(/\n+/g, ' ')).join(' | ') + ' |';
+      out += row + '\n';
+      if (isHeader && tr.querySelector('th')) {
+        out += '| ' + cells.map(() => '---').join(' | ') + ' |\n';
+        isHeader = false;
+      }
+    }
+    return out + '\n';
+  }
+
+  if (tag === 'strong' || tag === 'b') {
+    const txt = innerDomToMarkdown(node);
+    return txt ? '**' + txt + '**' : '';
+  }
+  if (tag === 'em' || tag === 'i') {
+    if (node.closest('pre, code')) return node.textContent;
+    const txt = innerDomToMarkdown(node);
+    return txt ? '*' + txt + '*' : '';
+  }
+  if (tag === 'del' || tag === 's' || tag === 'strike') {
+    const txt = innerDomToMarkdown(node);
+    return txt ? '~~' + txt + '~~' : '';
+  }
+  if (tag === 'code') {
+    if (node.closest('pre')) return node.textContent;
+    return '`' + node.textContent + '`';
+  }
+  if (tag === 'a') {
+    const href = node.dataset.rawPath || node.dataset.path || node.getAttribute('href') || '';
+    const txt = innerDomToMarkdown(node).trim() || href;
+    return '[' + txt + '](' + href + ')';
+  }
+  if (tag === 'img') {
+    const src = node.dataset.rawPath || node.dataset.origSrc || node.getAttribute('src') || '';
+    const alt = node.getAttribute('alt') || '';
+    return '![' + alt + '](' + src + ')';
+  }
+  if (tag === 'hr') return '\n---\n\n';
+  if (tag === 'br') return '\n';
+  if (tag === 'input' && node.getAttribute('type') === 'checkbox') {
+    return node.checked ? '[x] ' : '[ ] ';
+  }
+
+  return innerDomToMarkdown(node);
+}
+
+function innerDomToMarkdown(node) {
+  let s = '';
+  for (const c of node.childNodes) {
+    s += domToMarkdown(c);
+  }
+  return s;
+}
+
 
 export function openLightbox(img) {
   const lb = $('#img-lightbox');

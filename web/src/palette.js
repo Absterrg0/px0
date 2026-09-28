@@ -17,6 +17,9 @@ import { openSettings, isAutoRevealEnabled } from './settings.js';
 import { showVimHelp, isVimEnabled, setVimModeEnabled } from './vim.js';
 import { launchPR } from './pr.js';
 import { newThread } from './thread.js';
+import { copyToClipboard, copyRichToClipboard } from './ui.js';
+import { getDocRaw } from './markdown.js';
+import { getSelectedRangeInfo } from './selbar.js';
 
 export const overlay = $('#overlay');
 export const palInput = $('#pal');
@@ -25,6 +28,38 @@ export let pal = null;
 
 
 export const COMMANDS = [
+  { name: withKeys('File: Copy Source Code ({Mod+C})'), run: () => {
+    const info = getSelectedRangeInfo();
+    const d = doc_();
+    if (info && info.text) {
+      copyToClipboard(info.text, 'Copied source code');
+    } else if (d) {
+      getDocRaw(d).then(raw => copyToClipboard(raw, `Copied ${d.name} (${d.total} lines)`));
+    }
+  } },
+  { name: 'File: Copy Raw Markdown', run: () => {
+    const d = doc_();
+    if (!d) return;
+    const info = getSelectedRangeInfo();
+    if (info && info.rawMarkdown) {
+      copyToClipboard(info.rawMarkdown, 'Copied raw Markdown');
+    } else {
+      getDocRaw(d).then(raw => copyToClipboard(raw, `Copied ${d.name} (${d.total} lines)`));
+    }
+  } },
+  { name: 'File: Copy Formatted Text (Markdown Preview)', run: () => {
+    const info = getSelectedRangeInfo();
+    if (info && info.isMarkdownPreview) {
+      copyRichToClipboard(info.text, info.html, 'Copied formatted text');
+    } else {
+      const d = doc_();
+      if (d) getDocRaw(d).then(raw => copyToClipboard(raw, `Copied ${d.name}`));
+    }
+  } },
+  { name: 'File: Copy Relative Path', run: () => {
+    const d = doc_();
+    if (d) copyToClipboard(d.path, `Copied ${d.path}`);
+  } },
   { name: withKeys('Preferences: Open Settings (UI) ({Mod+,})'), run: () => openSettings('ui') },
   { name: 'Preferences: Open Settings (JSON)', run: () => openSettings('json') },
   { name: 'Go to File…', run: () => openPalette('file') },
