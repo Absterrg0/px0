@@ -96,7 +96,13 @@ initProblems();
   if (S.meta.version) {
     const emptyVerEl = $('#empty-ver');
     if (emptyVerEl) emptyVerEl.textContent = 'v' + S.meta.version;
+    const stVerEl = $('#st-ver');
+    if (stVerEl) {
+      stVerEl.textContent = 'v' + S.meta.version;
+      stVerEl.title = `px0 v${S.meta.version} (Click for shortcuts & help)`;
+    }
   }
+  updateStatus();
   try {
     const session = await api('/api/session');
     if (session && Array.isArray(session.openDirs) && session.openDirs.length > 0) {
