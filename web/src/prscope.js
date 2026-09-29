@@ -10,20 +10,16 @@
 // CSS on #tree (.scope-yours, .scope-pr); this module only owns the counts and the choice.
 import { $, S, doc_ } from './state.js';
 import { on } from './bus.js';
-import { treeEl, relabelTreeBadges } from './tree.js';
+import { treeEl, relabelTreeBadges, inGitMode } from './tree.js';
 import { focusDiffScope, syncDiffView } from './diff.js';
 
 let scope = 'all';           // 'all' | 'yours'
 let allCount = 0, yourCount = 0;
 
-const bar = () => $('#scope-bar');
-
-function inGitMode() {
-  return !!treeEl?.classList.contains('changed-only');
-}
+const scopeBar = () => $('#scope-bar');
 
 function apply() {
-  const b = bar();
+  const b = scopeBar();
   if (!b) return;
   const show = !!S.meta?.pr && inGitMode();
   b.hidden = !show;
@@ -53,7 +49,7 @@ export function updateScopeCounts(statuses = {}, yourStatuses = {}) {
 }
 
 export function initPRScope() {
-  const b = bar();
+  const b = scopeBar();
   if (!b) return;
   b.addEventListener('click', e => {
     const btn = e.target.closest('button[data-scope]');

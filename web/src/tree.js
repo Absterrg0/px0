@@ -458,6 +458,10 @@ export function hasGitView() {
   return !!(S.meta?.git && ((S.meta.gitChanges > 0) || (S.unpushedCount > 0)));
 }
 
+export function inGitMode() {
+  return !!treeEl?.classList.contains('changed-only');
+}
+
 export function updateSidebarToggleState() {
   const btnChanged = $('#btn-changed');
   if (!btnChanged) return;
