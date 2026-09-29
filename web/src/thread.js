@@ -28,6 +28,7 @@ const thr = {
   cur: null,          // the open thread, as last received
   draft: null,        // {path, l1, l2} for a thread not yet created, or {} for a workspace-level one
   listEs: null,
+  opening: null,      // id of the thread being fetched, so a late reply for another one is dropped
   threadEs: null,
   sending: false,
 };
@@ -521,18 +522,32 @@ function thrOpenStream(id) {
   es.onerror = () => { /* EventSource reconnects on its own and resends a snapshot */ };
 }
 
-export function openThread(id) {
+export async function openThread(id) {
   thr.draft = null;
   thr.cur = null;
+  thrCloseStream();
   showRightInspector('threads');
   thrShow('thread');
   thrEl.msgs.innerHTML = '<div class="hint">Loading…</div>';
   thrEl.title.textContent = 'Thread';
   thrEl.del.hidden = true;
-  thrOpenStream(id);
+  thr.opening = id;
+  // A plain request shows a saved thread at once. The live stream is only for
+  // a turn still being written, so browsing past threads never waits on it.
+  try {
+    const t = await api('/api/threads/get', { id });
+    if (thr.opening !== id) return;
+    thr.cur = t;
+    thrRenderState();
+    if (thrRunning()) thrOpenStream(id);
+  } catch (e) {
+    if (thr.opening !== id) return;
+    thrEl.msgs.innerHTML = '<div class="hint">Could not load this thread: ' + esc(e.message) + '</div>';
+  }
 }
 
 function thrBack() {
+  thr.opening = null;
   thrCloseStream();
   thr.cur = null;
   thr.draft = null;
@@ -544,6 +559,7 @@ function thrBack() {
    omitted. Nothing is created on the server until the first message is sent. */
 export function newThread(info) {
   if (!thr.avail) { showToast('!', 'Threads need a coding harness: run px0 without -no-agent'); return; }
+  thr.opening = null;
   thrCloseStream();
   thr.cur = null;
   thr.draft = info && info.path ? { path: info.path, l1: info.l1, l2: info.l2 } : {};
@@ -567,6 +583,7 @@ async function thrSend() {
       thrOpenStream(t.id);
     } else if (thr.cur) {
       await apiPostJson('/api/threads/send', { id: thr.cur.id, message });
+      if (!thr.threadEs) thrOpenStream(thr.cur.id);
     } else {
       return;
     }

@@ -465,8 +465,9 @@ export function initDiff() {
       e.preventDefault();
       e.stopPropagation();
       if (d) pushHistory(d.path, w.line);
-      const targetView = e.altKey ? 'diff' : 'source';
-      gotoDefinition(w, { view: targetView });
+      // Plain click keeps the current mode; Alt flips it.
+      const inDiff = !!d.diffMode;
+      gotoDefinition(w, { view: (e.altKey ? !inDiff : inDiff) ? 'diff' : 'source' });
       return;
     }
   });

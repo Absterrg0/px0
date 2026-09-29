@@ -68,12 +68,10 @@ function openTabMenu(index, x, y) {
 }
 
 export async function openFile(path, opts = {}) {
-  const { line, push = true, col, view } = opts;
+  const { line, push = true, col, view, soft = false } = opts;
   const prev = doc_();
-  const sourceSelected = prev ? !prev.diffMode : false;
-  const diffSelected = prev ? !!prev.diffMode : false;
   const wantsDiff = view === 'diff';
-  const wantsSource = view === 'source' || (sourceSelected && !wantsDiff);
+  const wantsSource = view === 'source';
 
   let idx = S.tabs.findIndex(t => t.path === path);
   if (idx < 0) {
@@ -97,18 +95,11 @@ export async function openFile(path, opts = {}) {
         initialDiffMode = null;
         initialDismissed = true;
         initialOpenedInDiff = false;
-      } else if (wantsDiff || j.deleted) {
-        initialDiffMode = layoutPref() || 'split';
-        initialDismissed = false;
-        initialOpenedInDiff = true;
-      } else if (treeEl?.classList.contains('changed-only') || diffSelected) {
-        initialDiffMode = layoutPref() || 'split';
-        initialDismissed = false;
-        initialOpenedInDiff = true;
       } else {
-        initialDiffMode = null;
+        // Any file with a diff opens in diff mode unless source was asked for.
+        initialDiffMode = layoutPref() || 'split';
         initialDismissed = false;
-        initialOpenedInDiff = false;
+        initialOpenedInDiff = true;
       }
     }
 
@@ -151,9 +142,9 @@ export async function openFile(path, opts = {}) {
         d.openedInDiffView = true;
       } else {
         d.diffMode = null;
-        setStatusNote('No diff for ' + d.name + ' — showing source', 3000);
+        if (!soft) setStatusNote('No diff for ' + d.name + ' — showing source', 3000);
       }
-    } else if (d.diffAvailable && !d.diffDismissed && d.diffMode === null && (treeEl?.classList.contains('changed-only') || diffSelected)) {
+    } else if (d.diffAvailable && !d.diffDismissed && d.diffMode === null) {
       d.diffMode = layoutPref() || 'split';
       d.openedInDiffView = true;
     }
