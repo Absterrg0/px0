@@ -242,10 +242,11 @@ body.side-hidden #side, body.side-hidden #resizer { display: none; }
 #tree.changed-only .tr.file:not(.dirty) { display: none; }
 #tree.changed-only .tw:not(:has(.dirty)) { display: none; }
 
-/* Git view on a clean working tree renders no rows at all, so the tree stops
-   claiming the sidebar's spare height and says why; the Unpushed section below
-   is then the whole of the view. */
-#tree.changed-only.no-changes { flex: 0 0 auto; padding-bottom: 0; }
+/* Git view on a clean working tree renders no rows at all, so the tree says
+   why rather than looking like it failed to load. It keeps growing into the
+   sidebar's spare height: it is the column's only flex-grow item, and taking
+   that away would leave nothing to absorb the slack, stacking the panels from
+   the top and lifting .side-foot off the bottom edge. */
 #tree.changed-only.no-changes::after {
   content: "Working tree clean"; display: block;
   padding: 8px 12px; font: 11.5px var(--ui); color: var(--faint);
