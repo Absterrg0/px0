@@ -9,6 +9,7 @@ import { reindexWorkspace } from './panels.js';
 import { refreshPRMeta } from './pr.js';
 import { openSettings } from './settings.js';
 import { layout, render } from './renderer.js';
+import { refreshUnpushed } from './unpushed.js';
 
 const panel = () => $('#git-panel');
 
@@ -248,6 +249,7 @@ async function doCommit() {
       flashActionSuccess(btn, 'Committed');
     }
     await fetchRecentCommits();
+    await refreshUnpushed();
   } catch (e) {
     if (btn) btn.textContent = prevText;
     showToast('!', e.message || 'Commit failed');
@@ -272,6 +274,7 @@ async function doPush() {
       btn.title = 'No unpushed commits to push';
       btn.disabled = true;
     }
+    await refreshUnpushed(); // the section empties out with the push
   } catch (e) {
     if (btn) btn.textContent = prevText;
     showToast('!', e.message || 'Push failed');
@@ -296,6 +299,7 @@ async function doPull() {
     await reindexWorkspace();
     if (S.meta?.pr) await refreshPRMeta();
     await fetchRecentCommits();
+    await refreshUnpushed();
   } catch (e) {
     if (btn) btn.textContent = prevText;
     showToast('!', e.message || 'Pull failed');
@@ -431,6 +435,7 @@ async function commitWithMessage(message, btn) {
     }
     showToast('✓', 'Committed with AI');
     await fetchRecentCommits();
+    await refreshUnpushed();
     if (btn) {
       btn.textContent = 'Stage all + Commit with AI';
       flashActionSuccess(btn, 'Committed');

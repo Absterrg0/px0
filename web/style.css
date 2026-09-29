@@ -242,6 +242,140 @@ body.side-hidden #side, body.side-hidden #resizer { display: none; }
 #tree.changed-only .tr.file:not(.dirty) { display: none; }
 #tree.changed-only .tw:not(:has(.dirty)) { display: none; }
 
+/* Git view on a clean working tree renders no rows at all, so the tree stops
+   claiming the sidebar's spare height and says why; the Unpushed section below
+   is then the whole of the view. */
+#tree.changed-only.no-changes { flex: 0 0 auto; padding-bottom: 0; }
+#tree.changed-only.no-changes::after {
+  content: "Working tree clean"; display: block;
+  padding: 8px 12px; font: 11.5px var(--ui); color: var(--faint);
+}
+
+/* ---------- unpushed commits (sidebar: @{u}..HEAD) ---------- */
+.unpushed {
+  flex: 0 1 auto; display: flex; flex-direction: column; min-height: 26px;
+  max-height: 45vh; background: var(--bg2); border-top: 1px solid var(--line);
+  position: relative;
+}
+.unpushed-resizer {
+  position: absolute; top: -3px; left: 0; right: 0; height: 6px; cursor: row-resize; z-index: 2;
+}
+.unpushed-resizer:hover, .unpushed-resizer.drag { background: var(--accent); opacity: .5; }
+.unpushed[hidden] { display: none; }
+.unpushed.collapsed { flex: none; }
+.unpushed.collapsed .unpushed-body { display: none; }
+.unpushed.collapsed .pr-comments-collapse { transform: rotate(-90deg); }
+.unpushed-head {
+  flex: none; display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-bottom: 1px solid var(--line); user-select: none;
+}
+.unpushed-head .grow { flex: 1; min-width: 0; }
+.unpushed-icon { flex: none; color: var(--accent); opacity: .85; }
+.unpushed-title {
+  font: 600 11px var(--ui); color: var(--dim);
+  text-transform: uppercase; letter-spacing: .05em; flex: none;
+}
+.unpushed-count {
+  flex: none; font: 600 10px/1 var(--mono); color: var(--accent-fg);
+  background: var(--bg4); border-radius: 8px; padding: 2px 5px;
+}
+/* The branch the list is measured against: without it "unpushed" is ambiguous. */
+.unpushed-upstream {
+  flex: none; max-width: 45%; font: 10.5px var(--mono); color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.unpushed-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0 8px; }
+
+.up-row {
+  display: flex; align-items: center; gap: 5px; height: 22px;
+  padding: 0 10px 0 8px; white-space: nowrap; cursor: pointer; user-select: none;
+}
+.up-row:hover { background: var(--bg3); }
+.up-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+/* Same disclosure triangle as the file tree's folders. */
+.up-ar {
+  flex: none; width: 0; height: 0; margin-left: 2px;
+  border: 4px solid transparent; border-left-color: var(--faint);
+  transition: transform .12s;
+}
+.up-commit.open .up-ar { transform: rotate(90deg) translateX(1px); }
+.up-subject {
+  flex: 1; min-width: 0; font-size: 12.5px; color: var(--fg);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.up-sha { flex: none; font: 10.5px var(--mono); color: var(--faint); }
+.up-row:hover .up-sha { color: var(--dim); }
+
+.up-files { display: none; }
+.up-commit.open .up-files { display: block; }
+.up-note { padding: 4px 10px 4px 26px; font: 11px var(--ui); color: var(--faint); }
+.up-file {
+  display: flex; align-items: baseline; gap: 6px; height: 21px;
+  padding: 0 10px 0 26px; white-space: nowrap; cursor: pointer; user-select: none;
+}
+.up-file:hover { background: var(--bg3); }
+.up-file.sel { background: var(--bg4); }
+.up-file-name { flex: none; font-size: 12.5px; color: var(--fg); }
+.up-file-dir {
+  flex: 1; min-width: 0; font-size: 11px; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis;
+}
+.up-file .gs {
+  margin-left: auto; flex: none; font: 600 10px/1 var(--mono); padding: 0 4px;
+}
+/* The tree colours these through .tr.git-*; here the letter carries it itself. */
+.up-file .gs.git-M, .up-file .gs.git-R { color: var(--accent-fg); }
+.up-file .gs.git-A, .up-file .gs.git-untracked { color: var(--gi); }
+.up-file .gs.git-D { color: var(--gd); }
+
+/* A tab pinned to a commit rather than the working tree. */
+.tab-ref {
+  flex: none; font: 10px var(--mono); color: var(--faint);
+  margin-left: 1px; letter-spacing: -0.02em;
+}
+.tab.active .tab-ref { color: var(--accent-fg); }
+
+/* ---------- commit card (hovering an unpushed commit) ---------- */
+#commitcard {
+  position: fixed; z-index: 60; width: min(420px, 60vw);
+  background: var(--bg3); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow); overflow: hidden; pointer-events: auto;
+  animation: hcin .09s ease-out;
+}
+#commitcard[hidden] { display: none; }
+.cc-head {
+  display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+  background: var(--bg2); border-bottom: 1px solid var(--line);
+}
+.cc-head .grow { flex: 1; }
+.cc-sha { font: 600 11px var(--mono); color: var(--accent-fg); }
+.cc-copy {
+  background: var(--bg); border: 1px solid var(--line); color: var(--fg);
+  font: 11px/1 var(--ui); padding: 4px 8px; border-radius: var(--r);
+  white-space: nowrap; transition: background .12s, border-color .12s, color .12s;
+}
+.cc-copy:hover { background: var(--bg4); color: var(--accent-fg); border-color: var(--accent); }
+.cc-meta {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  padding: 7px 12px 0; font: 11.5px var(--ui); color: var(--dim);
+}
+.cc-who { color: var(--fg); font-weight: 600; }
+a.cc-who { text-decoration: underline; text-underline-offset: 2px; }
+a.cc-who:hover { color: var(--accent-fg); }
+.cc-dot { color: var(--faint); }
+.cc-msg {
+  padding: 6px 12px 8px; font: var(--fs)/1.55 var(--mono); color: var(--fg);
+  white-space: pre-wrap; word-break: break-word;
+  max-height: 260px; overflow-y: auto; overflow-x: hidden;
+}
+.cc-stat {
+  display: flex; align-items: center; gap: 10px; padding: 5px 12px;
+  font: 11px var(--mono); border-top: 1px solid var(--line); background: var(--bg2);
+}
+.cc-files { color: var(--faint); }
+.cc-add { color: var(--gi); }
+.cc-del { color: var(--gd); }
+
 /* ---------- git panel (sidebar: stage/commit/push/pull) ---------- */
 .git-panel {
   flex: none; display: flex; flex-direction: column;

@@ -137,6 +137,9 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc(s.routePath("/api/git/push"), s.handleGitPush)
 	s.mux.HandleFunc(s.routePath("/api/git/pull"), s.handleGitPull)
 	s.mux.HandleFunc(s.routePath("/api/git/log"), s.handleGitLog)
+	s.mux.HandleFunc(s.routePath("/api/unpushed"), s.handleUnpushed)
+	s.mux.HandleFunc(s.routePath("/api/commitfiles"), s.handleCommitFiles)
+	s.mux.HandleFunc(s.routePath("/api/commitdetail"), s.handleCommitDetail)
 	s.mux.HandleFunc(s.routePath("/api/search"), s.handleSearch)
 	s.mux.HandleFunc(s.routePath("/api/outline"), s.handleOutline)
 	s.mux.HandleFunc(s.routePath("/api/def"), s.handleDef)
@@ -882,7 +885,11 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if os.IsNotExist(err) && gitAvailable(s.ix.Root()) {
 			diffAvail := false
-			if s.pr != nil {
+			// A file a local commit deleted has nothing on disk, so the normal
+			// working-tree check below can't vouch for it. Its commit diff can.
+			if ref := q.Get("ref"); ref != "" {
+				diffAvail = gitDiffCommit(s.ix.Root(), rel, ref) != ""
+			} else if s.pr != nil {
 				diffAvail = gitDiffAgainst(s.ix.Root(), rel, s.diffBase) != "" ||
 					gitDiffBetween(s.ix.Root(), rel, s.diffBase, s.prHeadSHA) != "" ||
 					gitDiffAgainst(s.ix.Root(), rel, s.prHeadSHA) != ""
@@ -941,7 +948,11 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 	_, coming := d.Exact()
 	diffAvail := false
 	if gitAvailable(s.ix.Root()) {
-		if s.pr != nil {
+		if ref := q.Get("ref"); ref != "" {
+			// Pinned to one commit: what matters is whether that commit touched
+			// the file, not whether the working tree has since diverged.
+			diffAvail = gitDiffCommit(s.ix.Root(), rel, ref) != ""
+		} else if s.pr != nil {
 			diffAvail = gitDiffAgainst(s.ix.Root(), rel, s.diffBase) != "" ||
 				gitDiffBetween(s.ix.Root(), rel, s.diffBase, s.prHeadSHA) != "" ||
 				gitDiffAgainst(s.ix.Root(), rel, s.prHeadSHA) != ""
@@ -1024,6 +1035,20 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "bad path")
 		return
 	}
+	// A ref names one local commit to read instead of the working tree: the
+	// diff that commit itself made to this file, frozen regardless of what has
+	// been edited since. Empty ref -> today's working-tree-vs-diffBase diff.
+	if ref := r.URL.Query().Get("ref"); ref != "" {
+		diff := gitDiffCommit(s.ix.Root(), rel, ref)
+		writeJSON(w, map[string]any{
+			"path":      rel,
+			"ref":       ref,
+			"diff":      diff,
+			"hunks":     highlightDiff(rel, diff),
+			"available": diff != "",
+		})
+		return
+	}
 	diff := gitDiffAgainst(s.ix.Root(), rel, s.diffBase)
 	if uiVerbose {
 		status := "clean"
@@ -1061,7 +1086,12 @@ func (s *Server) handleGutter(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "bad path")
 		return
 	}
-	added, modified, deleted := gitHunksAgainst(s.ix.Root(), rel, s.diffBase)
+	var added, modified, deleted []int
+	if ref := r.URL.Query().Get("ref"); ref != "" {
+		added, modified, deleted = gitHunksCommit(s.ix.Root(), rel, ref)
+	} else {
+		added, modified, deleted = gitHunksAgainst(s.ix.Root(), rel, s.diffBase)
+	}
 	nz := func(v []int) []int { // marshal as [] not null
 		if v == nil {
 			return []int{}
@@ -1409,6 +1439,67 @@ func (s *Server) handleGitLog(w http.ResponseWriter, r *http.Request) {
 		"commits":    commits,
 		"commitsUrl": commitsURL,
 	})
+}
+
+// handleUnpushed lists the commits that exist locally but not on the tracking
+// branch (@{u}..HEAD), newest first, plus the name of that tracking branch so
+// the sidebar can say what the list is measured against. available is false
+// (200, empty list) when git is off, no upstream is configured, or nothing is
+// ahead -- there is no guessed fallback branch, since measuring against the
+// wrong ref is worse than showing nothing.
+func (s *Server) handleUnpushed(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		fail(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	limit := 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil {
+			limit = n
+		}
+	}
+	upstream, commits := gitUnpushedCommits(s.ix.Root(), limit)
+	if commits == nil {
+		commits = []UnpushedCommit{}
+	}
+	writeJSON(w, map[string]any{
+		"available": upstream != "" && len(commits) > 0,
+		"upstream":  upstream,
+		"commits":   commits,
+	})
+}
+
+// handleCommitFiles returns the paths one commit touched, badged with git's
+// name-status letter. Unknown SHAs come back as an empty list, not an error:
+// the only way to ask for one is from a list px0 handed out, and a commit
+// that has since been rewritten is a stale click, not a failure worth a toast.
+func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		fail(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	sha := r.URL.Query().Get("sha")
+	files := gitCommitFiles(s.ix.Root(), sha)
+	if files == nil {
+		files = []CommitFile{}
+	}
+	writeJSON(w, map[string]any{"sha": sha, "files": files})
+}
+
+// handleCommitDetail returns one commit's author, full message and diffstat
+// for the hover card.
+func (s *Server) handleCommitDetail(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		fail(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	sha := r.URL.Query().Get("sha")
+	d, ok := gitCommitDetail(s.ix.Root(), sha)
+	if !ok {
+		fail(w, http.StatusNotFound, "unknown commit")
+		return
+	}
+	writeJSON(w, d)
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {

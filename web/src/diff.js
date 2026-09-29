@@ -49,8 +49,12 @@ export function syncDiffView(force = false) {
     diffview.hidden = !want;
     if (want) drawDiff(want, force);
     else { diffContent.replaceChildren(); if (prSyncHandler) prSyncHandler(); }
-  } else if (want && want.diffHunks !== undefined) {
-    renderDiff(want);
+  } else if (want) {
+    /* Same doc still on screen. A caller that dropped the cached diff -- the
+       tab being pointed at a different commit, say -- leaves the view showing
+       the wrong revision, so that has to refetch rather than just repaint. */
+    if (want.diffText === undefined) drawDiff(want);
+    else if (want.diffHunks !== undefined) renderDiff(want);
   }
 }
 
@@ -88,9 +92,15 @@ export async function setDiffMode(mode) {
 async function drawDiff(d, force = false) {
   if (force || d.diffText === undefined) {
     diffContent.replaceChildren();
+    /* Which revision this fetch is for. Clicking through a commit's files, or
+       from a commit back to the tree, can leave an earlier request in flight;
+       without this its answer would land in a doc that has since been pointed
+       somewhere else and show the wrong commit's diff. */
+    const ref = d.diffRef || '';
     try {
-      d.diffReq = api('/api/diff', { path: d.path });
+      d.diffReq = api('/api/diff', { path: d.path, ref });
       const j = await d.diffReq;
+      if ((d.diffRef || '') !== ref) return;
       d.diffText = j.diff || '';
       d.diffHunks = j.hunks || parseDiff(d.diffText);
       // In a PR review session the server also splits the diff at the PR's
@@ -100,6 +110,7 @@ async function drawDiff(d, force = false) {
       d.prDiffHunks = j.prHunks !== undefined ? j.prHunks : (j.prDiff !== undefined ? parseDiff(j.prDiff) : undefined);
       d.yourDiffHunks = j.yourHunks !== undefined ? j.yourHunks : (j.yourDiff !== undefined ? parseDiff(j.yourDiff) : undefined);
     } catch (e) {
+      if ((d.diffRef || '') !== ref) return;
       d.diffText = '';
       d.diffHunks = [];
       d.prDiffHunks = undefined;
@@ -141,6 +152,25 @@ function appendHunks(frag, hunks, mode, reviewable) {
 function renderDiff(d) {
   diffContent.replaceChildren();
   const frag = document.createDocumentFragment();
+  if (d.diffRef) {
+    /* Pinned to one commit by the Unpushed sidebar section. Its line numbers
+       are that commit's, not the working tree's, so nothing here is a review
+       target (reviewable=false) -- see anchor() below. */
+    const hunks = d.diffHunks || [];
+    if (!hunks.length) {
+      const p = document.createElement('div');
+      p.className = 'diff-empty';
+      p.textContent = 'This commit made no change to ' + d.name + '.';
+      diffContent.append(p);
+      return;
+    }
+    frag.append(createDiffSection(d, 'commit', 'In commit ' + d.diffRef.slice(0, 7),
+      'this commit only, not the working tree', (bodyEl) => appendHunks(bodyEl, hunks, d.diffMode, false)));
+    diffContent.append(frag);
+    syncDiffAgentTargets();
+    if (prSyncHandler) prSyncHandler();
+    return;
+  }
   if (S.meta?.pr && d.prDiffHunks !== undefined) {
     const prHunks = d.prDiffHunks || [];
     const yourHunks = d.yourDiffHunks || [];
