@@ -100,6 +100,8 @@ function drawUnpushed() {
   const el = upBody();
   if (!el) return;
 
+  const title = $('.unpushed-title');
+  if (title) title.textContent = S.meta?.pr ? 'Your commits' : 'Unpushed';
   const count = $('#unpushed-count');
   if (count) count.textContent = upList.length ? String(upList.length) : '';
   const up = $('#unpushed-upstream');

@@ -27,8 +27,8 @@ import { initGitStream } from './gitstream.js';
 import { initGitPanel } from './gitpanel.js';
 import { initPR } from './pr.js';
 import { initLineComment } from './linecomment.js';
-import { initProblems } from './problems.js';
 import { initUnpushed, refreshUnpushed } from './unpushed.js';
+import { initPRScope } from './prscope.js';
 
 // Initialize all subsystems
 initRenderer();
@@ -57,8 +57,8 @@ initSettings();
 initVim();
 initImageViewer();
 initLineComment();
-initProblems();
 initUnpushed();
+initPRScope();
 
 // Bootstrap application lifecycle
 (async function boot() {

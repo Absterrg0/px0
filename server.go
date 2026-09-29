@@ -149,7 +149,6 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc(s.routePath("/api/lsp/calls"), s.handleLSPCalls)
 	s.mux.HandleFunc(s.routePath("/api/lsp/symbols"), s.handleLSPSymbols)
 	s.mux.HandleFunc(s.routePath("/api/lsp/hover"), s.handleLSPHover)
-	s.mux.HandleFunc(s.routePath("/api/lsp/problems"), s.handleLSPProblems)
 	s.mux.HandleFunc(s.routePath("/api/lsp/warm"), s.handleLSPWarm)
 	s.mux.HandleFunc(s.routePath("/api/lsp/setup"), s.handleLSPSetup)
 	s.mux.HandleFunc(s.routePath("/api/lsp/install"), s.handleLSPInstall)
@@ -437,6 +436,7 @@ func (s *Server) SetPR(p *prSession) {
 		if s.ix != nil {
 			s.ix.SetDiffBase(p.diffBase)
 			s.ix.SetPRHead(p.meta.HeadSHA)
+			s.ix.SetPushedHead(p.meta.HeadSHA)
 		}
 		if s.gitWatcher != nil {
 			s.gitWatcher.Trigger()
@@ -554,6 +554,7 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 			"diffBaseWarning": p.diffBaseWarning,
 			"headSHA":         p.meta.HeadSHA,
 			"url":             p.target.URL,
+			"files":           s.ix.PRFiles(),
 		}
 		p.mu.Unlock()
 	}
@@ -716,58 +717,6 @@ func (s *Server) handleLSPWarm(w http.ResponseWriter, r *http.Request) {
 	// The spawn keeps going even when this call gives up waiting on it.
 	_ = s.lsp.EnsureOpen(ctx, abs, rel)
 	writeJSON(w, s.lspBrief(rel))
-}
-
-func (s *Server) handleLSPProblems(w http.ResponseWriter, r *http.Request) {
-	abs, rel, ok := s.resolvePath(r.URL.Query().Get("path"))
-	if !ok {
-		fail(w, 400, "bad path")
-		return
-	}
-	ms, _ := strconv.Atoi(r.URL.Query().Get("wait"))
-	if ms < 0 {
-		ms = 0
-	}
-	if ms > 10000 {
-		ms = 10000
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(ms)*time.Millisecond)
-	defer cancel()
-
-	probs, err := s.lsp.Problems(ctx, abs, rel, ms)
-	state, srv := s.lsp.State(rel)
-
-	counts := map[string]int{
-		"error":   0,
-		"warning": 0,
-		"info":    0,
-		"hint":    0,
-		"total":   len(probs),
-	}
-	for _, p := range probs {
-		switch p.SeverityNum {
-		case 1:
-			counts["error"]++
-		case 2:
-			counts["warning"]++
-		case 3:
-			counts["info"]++
-		case 4:
-			counts["hint"]++
-		}
-	}
-
-	resp := map[string]any{
-		"path":     rel,
-		"problems": probs,
-		"counts":   counts,
-		"state":    string(state),
-		"server":   srv,
-	}
-	if err != nil && err != context.DeadlineExceeded && err != context.Canceled {
-		resp["error"] = err.Error()
-	}
-	writeJSON(w, resp)
 }
 
 func (s *Server) handleLSPHover(w http.ResponseWriter, r *http.Request) {
@@ -1339,6 +1288,17 @@ func (s *Server) handleGitPush(w http.ResponseWriter, r *http.Request) {
 			fail(w, http.StatusBadGateway, err.Error())
 			return
 		}
+		// Pushed commits leave the Unpushed list but stay "yours": only the
+		// pushed boundary moves, never the PR-changes boundary (prHeadSHA).
+		s.pr.mu.Lock()
+		pushed := s.pr.remoteHead()
+		s.pr.mu.Unlock()
+		if s.ix != nil {
+			s.ix.SetPushedHead(pushed)
+		}
+		if s.gitWatcher != nil {
+			s.gitWatcher.Trigger()
+		}
 		writeJSON(w, map[string]any{"ok": true})
 		return
 	}
@@ -1383,6 +1343,7 @@ func (s *Server) handleGitPull(w http.ResponseWriter, r *http.Request) {
 		if s.ix != nil {
 			s.ix.SetDiffBase(s.diffBase)
 			s.ix.SetPRHead(s.prHeadSHA)
+			s.ix.SetPushedHead(s.prHeadSHA)
 		}
 		if s.gitWatcher != nil {
 			s.gitWatcher.Trigger()
@@ -1458,7 +1419,18 @@ func (s *Server) handleUnpushed(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	upstream, commits := gitUnpushedCommits(s.ix.Root(), limit)
+	var upstream string
+	var commits []UnpushedCommit
+	if s.pr != nil {
+		// Detached PR checkout: your commits are everything past the PR head.
+		s.pr.mu.Lock()
+		head, branch := s.pr.remoteHead(), s.pr.meta.HeadRef
+		s.pr.mu.Unlock()
+		commits = gitCommitsSince(s.ix.Root(), head, limit)
+		upstream = fmt.Sprintf("PR #%d head (%s)", s.pr.meta.Number, branch)
+	} else {
+		upstream, commits = gitUnpushedCommits(s.ix.Root(), limit)
+	}
 	if commits == nil {
 		commits = []UnpushedCommit{}
 	}
