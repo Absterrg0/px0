@@ -343,11 +343,8 @@ func TestPRSessionPush(t *testing.T) {
 		t.Fatalf("expected upstream's refs/heads/feature to carry the pushed commit, got %q", out)
 	}
 	pushed := strings.TrimSpace(gitTestRun(t, worktree, "rev-parse", "HEAD"))
-	if p.pushedSHA != pushed {
-		t.Fatalf("Push should move pushedSHA to %s, got %q", pushed, p.pushedSHA)
-	}
-	if p.meta.HeadSHA != "" {
-		t.Fatalf("Push must not move meta.HeadSHA (the PR-changes boundary), got %q", p.meta.HeadSHA)
+	if p.meta.HeadSHA != pushed {
+		t.Fatalf("Push should move the PR head (meta.HeadSHA) to %s, got %q", pushed, p.meta.HeadSHA)
 	}
 	if p.remoteHead() != pushed {
 		t.Fatalf("remoteHead = %q, want %s", p.remoteHead(), pushed)
@@ -532,5 +529,69 @@ func TestHTTPSRemoteURL(t *testing.T) {
 		if got := httpsRemoteURL(in); got != want {
 			t.Errorf("httpsRemoteURL(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestPRSessionPullFollowsForcePush: a PR branch rewritten upstream is not a
+// fast-forward, but with nothing of the reviewer's in the checkout Pull follows
+// it instead of leaving stale content behind; with local commits it still refuses.
+func TestPRSessionPullFollowsForcePush(t *testing.T) {
+	if !gitInstalled() {
+		t.Skip("git not installed")
+	}
+	base := t.TempDir()
+	if r, err := filepath.EvalSymlinks(base); err == nil {
+		base = r
+	}
+	upstream := filepath.Join(base, "upstream.git")
+	os.MkdirAll(upstream, 0o755)
+	gitTestRun(t, upstream, "init", "--bare", "-b", "feature")
+
+	work := filepath.Join(base, "work")
+	os.MkdirAll(work, 0o755)
+	gitTestRun(t, work, "init", "-q", "-b", "feature")
+	for _, cfg := range [][2]string{{"user.email", "t@example.com"}, {"user.name", "T"}, {"commit.gpgsign", "false"}} {
+		gitTestRun(t, work, "config", cfg[0], cfg[1])
+	}
+	os.WriteFile(filepath.Join(work, "f.txt"), []byte("one\n"), 0o644)
+	gitTestRun(t, work, "add", ".")
+	gitTestRun(t, work, "commit", "-qm", "one")
+	gitTestRun(t, work, "push", "-q", upstream, "feature")
+
+	wt := filepath.Join(base, "wt")
+	gitTestRun(t, base, "clone", "-q", upstream, "wt")
+	for _, cfg := range [][2]string{{"user.email", "t@example.com"}, {"user.name", "T"}, {"commit.gpgsign", "false"}} {
+		gitTestRun(t, wt, "config", cfg[0], cfg[1])
+	}
+	head := strings.TrimSpace(gitTestRun(t, wt, "rev-parse", "HEAD"))
+	p := &prSession{
+		worktree: wt,
+		target:   PRTarget{Owner: "o", Repo: "r"},
+		meta:     PRMeta{Number: 1, BaseRef: "main", HeadRef: "feature", HeadRepoCloneURL: upstream, HeadSHA: head},
+	}
+
+	// Rewrite the PR branch: amend and force-push.
+	os.WriteFile(filepath.Join(work, "f.txt"), []byte("rewritten\n"), 0o644)
+	gitTestRun(t, work, "commit", "-aqm", "one (amended)", "--amend")
+	gitTestRun(t, work, "push", "-qf", upstream, "feature")
+
+	if _, err := p.Pull(); err != nil {
+		t.Fatalf("Pull should follow a force-push when nothing local is at stake: %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(wt, "f.txt")); string(got) != "rewritten\n" {
+		t.Fatalf("worktree still has stale content: %q", got)
+	}
+	if p.meta.HeadSHA == head {
+		t.Fatal("HeadSHA should have moved to the rewritten head")
+	}
+
+	// With a local commit in the way, the same situation is refused.
+	os.WriteFile(filepath.Join(wt, "f.txt"), []byte("mine\n"), 0o644)
+	gitTestRun(t, wt, "commit", "-aqm", "mine")
+	os.WriteFile(filepath.Join(work, "f.txt"), []byte("rewritten again\n"), 0o644)
+	gitTestRun(t, work, "commit", "-aqm", "again", "--amend")
+	gitTestRun(t, work, "push", "-qf", upstream, "feature")
+	if _, err := p.Pull(); !errors.Is(err, errPRDiverged) {
+		t.Fatalf("expected errPRDiverged with a local commit, got %v", err)
 	}
 }

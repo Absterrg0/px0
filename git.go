@@ -476,6 +476,43 @@ func gitDiff(root, relpath string) string {
 	return gitDiffAgainst(root, relpath, "HEAD")
 }
 
+// gitDiffFull returns the whole unified diff for `git diff <refs...>`, capped at
+// max bytes (with a marker line when cut). Untracked files are not part of a git
+// diff; callers that care list them separately (gitUntracked).
+func gitDiffFull(root string, max int, refs ...string) string {
+	if !gitAvailable(root) {
+		return ""
+	}
+	args := append([]string{"-C", root, "diff", "--no-color", "--no-ext-diff"}, refs...)
+	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return ""
+	}
+	if max > 0 && len(out) > max {
+		return string(out[:max]) + "\n… diff truncated; run git diff for the rest …\n"
+	}
+	return string(out)
+}
+
+// gitUntracked lists untracked, non-ignored files relative to the served root.
+func gitUntracked(root string) []string {
+	info := gitProbe(root)
+	if !info.ok {
+		return nil
+	}
+	out, err := exec.Command("git", "-C", root, "ls-files", "--others", "--exclude-standard", "-z").Output()
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, p := range strings.Split(string(out), "\x00") {
+		if p != "" {
+			files = append(files, p)
+		}
+	}
+	return files
+}
+
 // gitFilesBetween maps each path that differs between two commits to its
 // name-status letter (A, M, D, R...), relative to the served root (paths outside
 // it are dropped). PR review uses it for the PR's own file set and statuses:

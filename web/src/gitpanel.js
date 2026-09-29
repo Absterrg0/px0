@@ -7,6 +7,7 @@ import { $, esc, S, api, apiPostJson } from './state.js';
 import { showToast, copyToClipboard, flashActionSuccess } from './ui.js';
 import { reindexWorkspace } from './panels.js';
 import { refreshPRMeta } from './pr.js';
+import { reloadOpenTabs } from './tabs.js';
 import { openSettings } from './settings.js';
 import { layout, render } from './renderer.js';
 import { refreshUnpushed } from './unpushed.js';
@@ -277,6 +278,12 @@ async function doPush() {
       btn.disabled = true;
     }
     await refreshUnpushed(); // the section empties out with the push
+    if (S.meta?.pr) {
+      // Your commits are the PR's now: re-read the PR state (its file set and
+      // head) and repaint open diffs so "Your changes" empties out.
+      await refreshPRMeta();
+      await reloadOpenTabs();
+    }
   } catch (e) {
     if (btn) btn.textContent = prevText;
     showToast('!', e.message || 'Push failed');
@@ -300,6 +307,7 @@ async function doPull() {
     }
     await reindexWorkspace();
     if (S.meta?.pr) await refreshPRMeta();
+    await reloadOpenTabs(); // open files and diffs show the pulled content, not what was loaded before
     await fetchRecentCommits();
     await refreshUnpushed();
   } catch (e) {

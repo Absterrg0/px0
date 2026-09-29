@@ -15,7 +15,7 @@
 <!-- Every web/themes/*.css joined by the server. See docs/internals/styling-and-themes.md. -->
 <link rel="stylesheet" href="static/themes.css">
 </head>
-<body class="right-hidden">
+<body>
 <div id="app">
   <!-- SECTION: Sidebar (File explorer tree) -->
   <aside id="side">
@@ -497,6 +497,13 @@
         <div id="thr-anchor" class="thr-anchor" hidden></div>
         <div id="thr-msgs" class="thr-msgs"></div>
         <div class="thr-compose">
+          <!-- PR review only: what this thread is about (thread.js) -->
+          <div id="thr-scope" class="thr-scope" role="group" aria-label="What this thread is about" hidden>
+            <span class="thr-scope-label">About</span>
+            <button type="button" data-scope="pr" title="The whole pull request: merge-base to PR head">Whole PR</button>
+            <button type="button" data-scope="mine" title="Only your own changes on top of the PR (uncommitted and unpushed)">My changes</button>
+            <button type="button" data-scope="selection" title="Just the code this thread is anchored to">Selection</button>
+          </div>
           <div class="agent-meta">
             <span class="agent-meta-label">Model</span>
             <select class="agent-harness-select" id="thr-harness" title="Coding harness"></select>

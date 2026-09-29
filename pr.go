@@ -49,6 +49,8 @@ type prSession struct {
 	// out of "Unpushed" without folding them into "PR changes".
 	pushedSHA string
 
+	scopeDir string // temp dir holding the diff files handed to threads; removed in Close
+
 	comments []prComment
 	nextID   int64
 }
@@ -207,6 +209,9 @@ func (p *prSession) Close() {
 	if p == nil {
 		return
 	}
+	if p.scopeDir != "" {
+		os.RemoveAll(p.scopeDir)
+	}
 	if p.srcRepo != "" {
 		exec.Command("git", "-C", p.srcRepo, "worktree", "remove", "--force", p.worktree).Run()
 		exec.Command("git", "-C", p.srcRepo, "update-ref", "-d", fmt.Sprintf("refs/px0/pr/%d", p.meta.Number)).Run()
@@ -269,6 +274,26 @@ func redactToken(s, token string) string {
 	return strings.ReplaceAll(s, token, "***")
 }
 
+// writeScopeFile puts content in a per-session temp dir (outside the worktree, so
+// it never shows up as an untracked change) and returns its path, or "" if it
+// could not be written.
+func (p *prSession) writeScopeFile(name, content string) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.scopeDir == "" {
+		dir, err := os.MkdirTemp("", "px0-prdiff-*")
+		if err != nil {
+			return ""
+		}
+		p.scopeDir = dir
+	}
+	path := filepath.Join(p.scopeDir, name)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		return ""
+	}
+	return path
+}
+
 // errPRDiverged is returned by Pull when the checkout can't be fast-forwarded
 // onto the PR's current head -- local commits, or a force-pushed head, that
 // don't share a straight-line history with what was fetched. Resolving that
@@ -293,9 +318,15 @@ func (p *prSession) Pull() (info string, err error) {
 		return "", errors.New("commit or discard your local changes before pulling")
 	}
 
-	newRef := fmt.Sprintf("refs/px0/pr/%d", num)
-	if srcRepo != "" {
-		headRefspec := fmt.Sprintf("refs/pull/%d/head:%s", num, newRef)
+	// Fetch the PR branch itself, forced: it is the source of truth for the
+	// PR's head (refs/pull/N/head can lag behind a fresh push), and a
+	// force-pushed branch must not be refused as a non-fast-forward ref update.
+	// A local clone with no token keeps using its own origin instead, which is
+	// the remote that clone can already authenticate to.
+	newRef := "FETCH_HEAD"
+	if srcRepo != "" && token == "" {
+		newRef = fmt.Sprintf("refs/px0/pr/%d", num)
+		headRefspec := fmt.Sprintf("+refs/pull/%d/head:%s", num, newRef)
 		if out, err := exec.Command("git", "-C", srcRepo, "fetch", "--no-tags", "origin", headRefspec).CombinedOutput(); err != nil {
 			return "", fmt.Errorf("git fetch PR head: %w: %s", err, strings.TrimSpace(string(out)))
 		}
@@ -304,36 +335,69 @@ func (p *prSession) Pull() (info string, err error) {
 		if cloneURL == "" {
 			cloneURL = fmt.Sprintf("https://github.com/%s/%s.git", target.Owner, target.Repo)
 		}
-		if out, err := gitAuthCmd(token, "-C", worktree, "fetch", "--no-tags", cloneURL, headRef).CombinedOutput(); err != nil {
-			return "", fmt.Errorf("git fetch PR head: %w: %s", err, strings.TrimSpace(string(out)))
+		if out, err := gitAuthCmd(token, "-C", worktree, "fetch", "--no-tags", cloneURL, "+refs/heads/"+headRef).CombinedOutput(); err != nil {
+			return "", fmt.Errorf("git fetch PR head: %w: %s", err, redactToken(strings.TrimSpace(string(out)), token))
 		}
-		newRef = "FETCH_HEAD"
 	}
 
-	if exec.Command("git", "-C", worktree, "merge-base", "--is-ancestor", newRef, "HEAD").Run() == nil {
-		return "already up to date", nil
-	}
-	if exec.Command("git", "-C", worktree, "merge-base", "--is-ancestor", "HEAD", newRef).Run() != nil {
-		return "", errPRDiverged
-	}
-	if out, err := exec.Command("git", "-C", worktree, "reset", "--hard", newRef).CombinedOutput(); err != nil {
-		return "", fmt.Errorf("git reset: %w: %s", err, strings.TrimSpace(string(out)))
-	}
-
-	shaOut, err := exec.Command("git", "-C", worktree, "rev-parse", "HEAD").Output()
+	headOut, err := exec.Command("git", "-C", worktree, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse HEAD: %w", err)
 	}
-	diffBase, diffBaseWarning := computeDiffBase(worktree, srcRepo, token, target, baseRef, num, nil)
-
+	head := strings.TrimSpace(string(headOut))
 	p.mu.Lock()
-	p.meta.HeadSHA = strings.TrimSpace(string(shaOut))
-	p.pushedSHA = ""
+	knownHead := p.meta.HeadSHA
+	p.mu.Unlock()
+	nothingOfMine := head == knownHead // no local commits past the PR head we checked out
+
+	info = "pulled the latest changes"
+	upToDate := exec.Command("git", "-C", worktree, "merge-base", "--is-ancestor", newRef, "HEAD").Run() == nil
+	switch {
+	case upToDate:
+		info = "already up to date"
+	case exec.Command("git", "-C", worktree, "merge-base", "--is-ancestor", "HEAD", newRef).Run() == nil:
+		// plain fast-forward
+	case nothingOfMine:
+		// The PR branch was rewritten (force-push or rebase) and there is
+		// nothing of yours to lose: follow it.
+		info = "pulled the latest changes (the PR branch was force-pushed)"
+	default:
+		return "", errPRDiverged
+	}
+	if !upToDate {
+		if out, err := exec.Command("git", "-C", worktree, "reset", "--hard", newRef).CombinedOutput(); err != nil {
+			return "", fmt.Errorf("git reset: %w: %s", err, strings.TrimSpace(string(out)))
+		}
+		shaOut, err := exec.Command("git", "-C", worktree, "rev-parse", "HEAD").Output()
+		if err != nil {
+			return "", fmt.Errorf("git rev-parse HEAD: %w", err)
+		}
+		p.mu.Lock()
+		p.meta.HeadSHA = strings.TrimSpace(string(shaOut))
+		p.pushedSHA = ""
+		p.mu.Unlock()
+	}
+
+	// Title, state, merged, base branch: refresh what GitHub says about the PR
+	// itself, so the bar doesn't keep showing the state from session start.
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if p.provider == nil {
+		// nothing to ask
+	} else if fresh, err := p.provider.FetchPR(ctx, target, token); err == nil {
+		p.mu.Lock()
+		p.meta.Title, p.meta.State, p.meta.Merged, p.meta.MergedAt = fresh.Title, fresh.State, fresh.Merged, fresh.MergedAt
+		p.meta.Draft, p.meta.BaseRef = fresh.Draft, fresh.BaseRef
+		baseRef = p.meta.BaseRef
+		p.mu.Unlock()
+	}
+	diffBase, diffBaseWarning := computeDiffBase(worktree, srcRepo, token, target, baseRef, num, nil)
+	p.mu.Lock()
 	p.diffBase = diffBase
 	p.diffBaseWarning = diffBaseWarning
 	p.mu.Unlock()
 
-	return "pulled the latest changes", nil
+	return info, nil
 }
 
 // Push pushes the worktree's current commit to the PR's actual head branch
@@ -361,10 +425,12 @@ func (p *prSession) Push() error {
 	if err != nil {
 		return fmt.Errorf("git push: %w: %s", err, redactToken(strings.TrimSpace(string(out)), token))
 	}
-	// Only the unpushed boundary moves; what you pushed stays under "Yours".
+	// What you pushed is now part of the PR: the PR head moves up to it, so
+	// those commits leave "Your changes" and join "PR changes".
 	if sha, err := exec.Command("git", "-C", worktree, "rev-parse", "HEAD").Output(); err == nil {
 		p.mu.Lock()
-		p.pushedSHA = strings.TrimSpace(string(sha))
+		p.meta.HeadSHA = strings.TrimSpace(string(sha))
+		p.pushedSHA = ""
 		p.mu.Unlock()
 	}
 	return nil
