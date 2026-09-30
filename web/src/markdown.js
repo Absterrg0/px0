@@ -406,12 +406,12 @@ export function clearPreviewMarks() {
   if (marks.length) mdArticle.normalize();
 }
 
-/* Marks every case-insensitive match of q in the rendered text; returns the count. */
-export function findInPreview(q) {
+/* Marks every match of q in the rendered text; returns the count. */
+export function findInPreview(q, caseSensitive) {
   clearPreviewMarks();
   if (!q) return 0;
   // A table's line numbers and cap footer are chrome, not content: no hits there.
-  const marks = markNodes(mdArticle, q, false, 'mark').filter(m => {
+  const marks = markNodes(mdArticle, q, caseSensitive, 'mark').filter(m => {
     if (!m.closest('.ln, .csv-cap')) return true;
     m.replaceWith(...m.childNodes);
     return false;

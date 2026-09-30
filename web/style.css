@@ -1284,6 +1284,8 @@ kbd {
 #find-count { font: 11px var(--mono); color: var(--faint); min-width: 4.5em; text-align: right; }
 #findbar button { width: 22px; height: 22px; border-radius: var(--r); color: var(--dim); display: grid; place-items: center; font-size: 12px; }
 #findbar button:hover { background: var(--bg4); color: var(--fg); }
+#find-case { font: 600 10.5px/1 var(--mono); border: 1px solid transparent; }
+#find-case.on, #find-case.on:hover { color: var(--accent-fg); border-color: var(--accent); background: var(--bg4); }
 
 /* ---------- inline edit comments ----------
    #agentbox sits at the top of the Threads pane in the right sidebar: the batch
