@@ -52,11 +52,12 @@ func cleanBasePath(p string) string {
 type Server struct {
 	ix        *Index
 	lsp       *lspManager
-	agent     *agentManager  // nil unless main wires editing for this session
-	threads   *threadManager // nil unless editing is wired: threads run on the same harness
-	pr        *prSession     // nil unless main launched this process as `px0 pr ...`
-	diffBase  string         // ref /api/diff and /api/gutter diff against; "HEAD" unless in PR mode
-	prHeadSHA string         // PR mode only: the checked-out PR head commit. Frozen boundary between
+	tel       *TelemetryService // nil in tests; Track is nil-safe
+	agent     *agentManager     // nil unless main wires editing for this session
+	threads   *threadManager    // nil unless editing is wired: threads run on the same harness
+	pr        *prSession        // nil unless main launched this process as `px0 pr ...`
+	diffBase  string            // ref /api/diff and /api/gutter diff against; "HEAD" unless in PR mode
+	prHeadSHA string            // PR mode only: the checked-out PR head commit. Frozen boundary between
 	// the PR's own diff (diffBase..prHeadSHA) and the reviewer's local edits
 	// since checkout (prHeadSHA..working tree); refreshed on Pull.
 	gitWatcher *GitWatcher
@@ -1329,6 +1330,7 @@ func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request) {
 	if s.gitWatcher != nil {
 		s.gitWatcher.Trigger()
 	}
+	s.tel.Track("git_commit", nil)
 	writeJSON(w, map[string]any{"ok": true})
 }
 
