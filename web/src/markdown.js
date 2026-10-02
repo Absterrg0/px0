@@ -11,7 +11,7 @@ import { revealDir } from './tree.js';
 import { findbar, runFind } from './find.js';
 import { hideHover } from './hover.js';
 import { buildTable } from './table.js';
-import { renderMermaidBlocks } from './mermaid.js';
+import { renderMermaidBlocks, exitMermaidFullscreen } from './mermaid.js';
 
 /* Markdown tabs open rendered. The server converts the file with goldmark and
    passes raw HTML through, so nothing it returns is trusted: mdSanitize rebuilds
@@ -45,6 +45,7 @@ export function syncPreview() {
   const d = doc_();
   const want = previewing(d) ? d : null;
   if (want === mdShown) return;
+  exitMermaidFullscreen();
   if (mdShown && mdDrawn === mdShown) mdShown.mdScroll = mdview.scrollTop;
   mdShown = want;
   mdDrawn = null;
@@ -112,6 +113,7 @@ export function togglePreview() {
   const d = doc_();
   if (!previewKind(d)) { showToast('!', 'Preview works on Markdown, CSV and TSV files'); return; }
   hideHover();
+  exitMermaidFullscreen();
   if (previewing(d)) {
     const line = mdDrawn === d ? previewTopLine() : 1;
     mdSetPref(d, false);
