@@ -26,7 +26,8 @@ import (
 	"time"
 )
 
-//go:embed web
+//go:embed web/index.html web/style.css web/themes web/vendor
+//go:embed web/app.js
 var embedded embed.FS
 
 // assets is the embedded web/ directory.
@@ -97,7 +98,7 @@ func (s *Server) routePath(subpath string) string {
 func (s *Server) registerRoutes() {
 	sub, _ := fs.Sub(assets, "web")
 	staticPrefix := s.routePath("/static/")
-	s.mux.Handle(staticPrefix, http.StripPrefix(staticPrefix, http.FileServer(http.FS(sub))))
+	s.mux.Handle(staticPrefix, s.handleStatic(sub, staticPrefix))
 	s.mux.HandleFunc(s.routePath("/static/themes.css"), s.handleThemes)
 
 	if s.basePath != "/" && s.basePath != "" {
@@ -612,6 +613,91 @@ func (s *Server) handleThemes(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
 	io.WriteString(w, css.String())
+}
+
+func staticContentType(p string) string {
+	ext := strings.ToLower(path.Ext(p))
+	switch ext {
+	case ".js":
+		return "text/javascript; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".html":
+		return "text/html; charset=utf-8"
+	case ".json":
+		return "application/json; charset=utf-8"
+	case ".svg":
+		return "image/svg+xml"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".gif":
+		return "image/gif"
+	case ".ico":
+		return "image/x-icon"
+	case ".woff2":
+		return "font/woff2"
+	case ".woff":
+		return "font/woff"
+	case ".ttf":
+		return "font/ttf"
+	}
+	if ct := mime.TypeByExtension(ext); ct != "" {
+		return ct
+	}
+	return "application/octet-stream"
+}
+
+func (s *Server) handleStatic(sub fs.FS, prefix string) http.Handler {
+	fileServer := http.StripPrefix(prefix, http.FileServer(http.FS(sub)))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rel := strings.TrimPrefix(r.URL.Path, prefix)
+		rel = path.Clean(strings.TrimPrefix(rel, "/"))
+		if rel == "." || strings.HasPrefix(rel, "..") {
+			http.NotFound(w, r)
+			return
+		}
+
+		// Check if a pre-compressed .gz asset exists for this path.
+		gzPath := rel + ".gz"
+		if gzFile, err := sub.Open(gzPath); err == nil {
+			defer gzFile.Close()
+			fi, err := gzFile.Stat()
+			if err == nil && !fi.IsDir() {
+				mimeType := staticContentType(rel)
+				if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+					w.Header().Set("Content-Type", mimeType)
+					w.Header().Set("Content-Encoding", "gzip")
+					w.Header().Set("Vary", "Accept-Encoding")
+					if strings.HasPrefix(rel, "vendor/") {
+						w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+					}
+					if rs, ok := gzFile.(io.ReadSeeker); ok {
+						http.ServeContent(w, r, path.Base(rel), fi.ModTime(), rs)
+						return
+					}
+					io.Copy(w, gzFile)
+					return
+				}
+
+				// Client does not accept gzip: decompress on the fly.
+				gzReader, err := gzip.NewReader(gzFile)
+				if err == nil {
+					defer gzReader.Close()
+					w.Header().Set("Content-Type", mimeType)
+					w.Header().Set("Vary", "Accept-Encoding")
+					if strings.HasPrefix(rel, "vendor/") {
+						w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+					}
+					io.Copy(w, gzReader)
+					return
+				}
+			}
+		}
+
+		fileServer.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
