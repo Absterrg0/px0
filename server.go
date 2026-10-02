@@ -276,12 +276,32 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Add("Vary", "Accept-Encoding")
 		gz := gzipPool.Get().(*gzip.Writer)
 		gz.Reset(rec)
-		gw := &gzipWriter{ResponseWriter: rec, w: gz}
+		var disabled bool
+		gw := &gzipWriter{ResponseWriter: rec, w: gz, disabled: &disabled}
 		defer func() { gz.Close(); gzipPool.Put(gz) }()
 		out = gw
 	}
 
 	s.mux.ServeHTTP(out, r)
+}
+
+type gzipBypasser interface {
+	BypassGzip()
+}
+
+func bypassGzip(w http.ResponseWriter) {
+	curr := w
+	for curr != nil {
+		if b, ok := curr.(gzipBypasser); ok {
+			b.BypassGzip()
+			return
+		}
+		if u, ok := curr.(interface{ Unwrap() http.ResponseWriter }); ok {
+			curr = u.Unwrap()
+		} else {
+			break
+		}
+	}
 }
 
 var gzipPool = sync.Pool{New: func() any {
@@ -291,10 +311,28 @@ var gzipPool = sync.Pool{New: func() any {
 
 type gzipWriter struct {
 	http.ResponseWriter
-	w *gzip.Writer
+	w        *gzip.Writer
+	disabled *bool
+}
+
+func (g gzipWriter) BypassGzip() {
+	if g.disabled != nil {
+		*g.disabled = true
+	}
+	if g.w != nil {
+		g.w.Reset(io.Discard)
+	}
+}
+
+func (g gzipWriter) isDisabled() bool {
+	return g.disabled != nil && *g.disabled
 }
 
 func (g gzipWriter) WriteHeader(status int) {
+	if g.isDisabled() {
+		g.ResponseWriter.WriteHeader(status)
+		return
+	}
 	g.Header().Del("Content-Length")
 	if status == http.StatusNotModified || status == http.StatusNoContent {
 		g.Header().Del("Content-Encoding")
@@ -306,15 +344,15 @@ func (g gzipWriter) WriteHeader(status int) {
 }
 
 func (g gzipWriter) Write(b []byte) (int, error) {
-	g.Header().Del("Content-Length")
-	if g.w != nil {
-		return g.w.Write(b)
+	if g.isDisabled() || g.w == nil {
+		return g.ResponseWriter.Write(b)
 	}
-	return g.ResponseWriter.Write(b)
+	g.Header().Del("Content-Length")
+	return g.w.Write(b)
 }
 
 func (g gzipWriter) Flush() {
-	if g.w != nil {
+	if !g.isDisabled() && g.w != nil {
 		_ = g.w.Flush()
 	}
 	if flusher, ok := g.ResponseWriter.(http.Flusher); ok {
@@ -667,6 +705,7 @@ func (s *Server) handleStatic(sub fs.FS, prefix string) http.Handler {
 			if err == nil && !fi.IsDir() {
 				mimeType := staticContentType(rel)
 				if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+					bypassGzip(w)
 					w.Header().Set("Content-Type", mimeType)
 					w.Header().Set("Content-Encoding", "gzip")
 					w.Header().Set("Vary", "Accept-Encoding")

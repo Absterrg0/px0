@@ -203,6 +203,12 @@ func TestStaticAssetServing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to decompress gzip body: %v", err)
 	}
+	if bytes.HasPrefix(decompressed, []byte("\x1f\x8b")) {
+		t.Errorf("decompressed mermaid body is still gzipped (double gzip detected)")
+	}
+	if !strings.HasPrefix(string(decompressed), "\"use strict\";") {
+		t.Errorf("decompressed mermaid body missing expected javascript prefix")
+	}
 	if !strings.Contains(string(decompressed), "mermaid") {
 		t.Errorf("decompressed mermaid body missing 'mermaid' keyword")
 	}

@@ -2,7 +2,7 @@
 // Repository Markdown is untrusted: only sanitized text reaches this module, and
 // Mermaid's security-sensitive configuration cannot be changed by directives.
 
-const MERMAID_ASSET = 'static/vendor/mermaid-12.0.0.min.js';
+const MERMAID_ASSET = 'static/vendor/mermaid-12.0.0.min.js?v=12.0.0-2';
 const MERMAID_SECURE_KEYS = [
   'secure',
   'securityLevel',
@@ -59,8 +59,16 @@ function setCachedSvg(key, svg) {
   mermaidSvgCache.set(key, svg);
 }
 
+function getMermaidGlobal() {
+  return globalThis.mermaid || (typeof window !== 'undefined' ? window.mermaid : null) || globalThis.__esbuild_esm_mermaid_nm?.mermaid?.default;
+}
+
 function loadMermaidRuntime() {
-  if (globalThis.mermaid) return Promise.resolve(globalThis.mermaid);
+  const existing = getMermaidGlobal();
+  if (existing) {
+    globalThis.mermaid = existing;
+    return Promise.resolve(existing);
+  }
   if (mermaidRuntimePromise) return mermaidRuntimePromise;
 
   mermaidRuntimePromise = new Promise((resolve, reject) => {
@@ -68,8 +76,13 @@ function loadMermaidRuntime() {
     script.src = new URL(MERMAID_ASSET, document.baseURI || location.href).href;
     script.async = true;
     script.addEventListener('load', () => {
-      if (globalThis.mermaid) resolve(globalThis.mermaid);
-      else reject(new Error('Mermaid runtime did not initialize'));
+      const m = getMermaidGlobal();
+      if (m) {
+        globalThis.mermaid = m;
+        resolve(m);
+      } else {
+        reject(new Error('Mermaid runtime did not initialize'));
+      }
     }, { once: true });
     script.addEventListener('error', () => {
       reject(new Error('Mermaid runtime could not be loaded'));
