@@ -2730,15 +2730,25 @@ body.hide-git-gutter .g-git, body.hide-git-gutter [class*="git-"] { display: non
   cursor: pointer; transition: opacity .15s ease; display: inline-flex; align-items: center; gap: 3px;
 }
 #thr-new:hover, .thr-btn-primary:hover { opacity: .88; }
-.thr-head { justify-content: flex-start; }
+.thr-head { justify-content: flex-start; gap: 8px; }
 .thr-head .mini { margin-left: 0; }
-.thr-head #thr-delete { margin-left: auto; }
+.thr-head #thr-title { flex: 1; min-width: 0; }
+.thr-head #thr-delete { margin-left: auto; flex: none; }
+.thr-head #thr-delete:hover { color: var(--err); }
 #thr-list { padding: 4px 0; }
 .thr-item { padding: 7px 12px; cursor: pointer; border-bottom: 1px solid var(--line); }
 .thr-item:hover, .thr-item:focus-visible { background: var(--bg3); outline: none; }
 .thr-item.sel { background: var(--bg3); box-shadow: inset 2px 0 0 var(--accent); }
-.thr-item-title { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; }
+.thr-item-title { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; min-width: 0; }
+.thr-item-title-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thr-item-title > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thr-item-del {
+  flex: none; opacity: 0; color: var(--faint); padding: 2px; border-radius: var(--r);
+  cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  transition: opacity .12s ease, color .12s ease; margin-left: 2px;
+}
+.thr-item:hover .thr-item-del, .thr-item:focus-within .thr-item-del { opacity: 0.7; }
+.thr-item .thr-item-del:hover { opacity: 1; color: var(--err); background: var(--bg4); }
 .thr-item-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; font: 10.5px var(--mono); color: var(--faint); }
 .thr-item-ref { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
 .thr-spin {
@@ -2747,7 +2757,7 @@ body.hide-git-gutter .g-git, body.hide-git-gutter [class*="git-"] { display: non
 }
 @keyframes thrspin { to { transform: rotate(360deg); } }
 .thr-kind {
-  flex: none; margin-left: auto; font: 600 9.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .04em;
+  flex: none; font: 600 9.5px/1 var(--mono); text-transform: uppercase; letter-spacing: .04em;
   color: var(--faint); border: 1px solid var(--line); border-radius: var(--r); padding: 2px 4px;
 }
 .thr-fail { flex: none; color: var(--err); font-weight: 700; }
