@@ -250,7 +250,6 @@ export async function renderMermaidBlocks(root, current = () => true) {
       output.textContent = 'Unable to render Mermaid diagram: ' + mermaidErrorMessage(err);
     } finally {
       document.getElementById('d' + id)?.remove();
-      document.getElementById(id)?.remove();
     }
 
     // Yield cooperatively to the browser event loop so the UI remains fluid
