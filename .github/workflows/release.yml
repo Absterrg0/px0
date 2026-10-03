@@ -54,6 +54,9 @@ jobs:
           # Ensure VERSION file matches the release version
           echo "$VER" > VERSION
 
+      - name: Install UPX
+        run: sudo apt-get update && sudo apt-get install -y upx-ucl
+
       - name: Build Cross-Platform Binaries
         env:
           VERSION: ${{ steps.get_version.outputs.version }}
@@ -79,6 +82,9 @@ jobs:
             printf "Building %-28s ... " "$name"
             CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
               go build -trimpath -ldflags="$LDFLAGS" -o "dist/$name" .
+            if command -v upx >/dev/null 2>&1; then
+              upx --best --lzma -q "dist/$name" >/dev/null 2>&1 || true
+            fi
             printf "done (%s)\n" "$(du -h "dist/$name" | cut -f1)"
           done
 

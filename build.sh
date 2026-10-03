@@ -33,6 +33,9 @@ for t in $TARGETS; do
   printf '  %-28s' "$name"
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
     go build -trimpath -ldflags="$LDFLAGS" -o "$OUT/$name" .
+  if command -v upx >/dev/null 2>&1; then
+    upx --best --lzma -q "$OUT/$name" >/dev/null 2>&1 || true
+  fi
   printf '%s\n' "$(du -h "$OUT/$name" | cut -f1)"
 done
 
