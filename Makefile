@@ -39,10 +39,6 @@ web:
 build: web
 	@echo "Building px0 for local system..."
 	go build -trimpath -ldflags="$(LDFLAGS)" -o px0 .
-	@if command -v upx >/dev/null 2>&1; then \
-		echo "Compressing with UPX (--lzma)..."; \
-		upx --best --lzma -q px0; \
-	fi
 	@echo "Built ./px0 ($$(du -h px0 | cut -f1))"
 
 test: web
