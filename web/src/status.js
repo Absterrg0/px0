@@ -547,15 +547,35 @@ export function initMetrics() {
 
 /* The status bar stays on one line. When its contents outgrow the width, it
    sheds detail in steps (see the fit-N rules in style.css), least useful first,
-   stopping at the first step that fits. */
-const FIT_STEPS = 6;
+   stopping at the first step that fits. A shed step comes back only once it fits
+   with FIT_SLACK px to spare (the .grow spacer's width): if showing and hiding
+   used the same width, a 1px wobble while dragging a resizer would flip a whole
+   group on every move. */
+const FIT_STEPS = 6, FIT_SLACK = 16;
 const statusEl = $('#status');
+const growEl = $('.grow', statusEl);
+let fitLevel = 0;
+
+function setFitLevel(n) {
+  // toggle(_, force) leaves the class attribute alone when nothing changes.
+  for (let i = 1; i <= FIT_STEPS; i++) statusEl.classList.toggle('fit-' + i, i <= n);
+}
+
+const overflows = () => statusEl.scrollWidth > statusEl.clientWidth;
 
 export function fitStatus() {
-  for (let i = 1; i <= FIT_STEPS; i++) statusEl.classList.remove('fit-' + i);
-  for (let i = 1; i <= FIT_STEPS && statusEl.scrollWidth > statusEl.clientWidth; i++) {
-    statusEl.classList.add('fit-' + i);
+  let n = fitLevel;
+  if (overflows()) {
+    while (n < FIT_STEPS && overflows()) setFitLevel(++n);
+  } else {
+    // Less spare room than the slack now means even less with more shown.
+    while (n > 0 && growEl.offsetWidth >= FIT_SLACK) {
+      setFitLevel(n - 1);
+      if (overflows() || growEl.offsetWidth < FIT_SLACK) { setFitLevel(n); break; }
+      n--;
+    }
   }
+  fitLevel = n;
 }
 
 export function initStatusFit() {
