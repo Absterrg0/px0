@@ -547,35 +547,29 @@ export function initMetrics() {
 
 /* The status bar stays on one line. When its contents outgrow the width, it
    sheds detail in steps (see the fit-N rules in style.css), least useful first,
-   stopping at the first step that fits. A shed step comes back only once it fits
-   with FIT_SLACK px to spare (the .grow spacer's width): if showing and hiding
-   used the same width, a 1px wobble while dragging a resizer would flip a whole
-   group on every move. */
+   stopping at the first step that fits. A step comes back only with FIT_SLACK px
+   to spare, so a 1px wobble of a resizer cannot flip it on every move. */
 const FIT_STEPS = 6, FIT_SLACK = 16;
 const statusEl = $('#status');
 const growEl = $('.grow', statusEl);
 let fitLevel = 0;
 
-function setFitLevel(n) {
-  // toggle(_, force) leaves the class attribute alone when nothing changes.
+/* Apply fit level n and return the room left: the .grow spacer's width, or the
+   overflow as a negative number. */
+function applyFit(n) {
   for (let i = 1; i <= FIT_STEPS; i++) statusEl.classList.toggle('fit-' + i, i <= n);
+  return growEl.offsetWidth - (statusEl.scrollWidth - statusEl.clientWidth);
 }
 
-const overflows = () => statusEl.scrollWidth > statusEl.clientWidth;
-
 export function fitStatus() {
-  let n = fitLevel;
-  if (overflows()) {
-    while (n < FIT_STEPS && overflows()) setFitLevel(++n);
-  } else {
-    // Less spare room than the slack now means even less with more shown.
-    while (n > 0 && growEl.offsetWidth >= FIT_SLACK) {
-      setFitLevel(n - 1);
-      if (overflows() || growEl.offsetWidth < FIT_SLACK) { setFitLevel(n); break; }
-      n--;
-    }
+  let room = applyFit(fitLevel);
+  while (fitLevel < FIT_STEPS && room < 0) room = applyFit(++fitLevel);
+  // Showing more only ever shrinks the room, so stop as soon as it is short.
+  while (fitLevel > 0 && room >= FIT_SLACK) {
+    room = applyFit(fitLevel - 1);
+    if (room < FIT_SLACK) { applyFit(fitLevel); return; }
+    fitLevel--;
   }
-  fitLevel = n;
 }
 
 export function initStatusFit() {
