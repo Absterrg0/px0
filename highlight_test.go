@@ -151,7 +151,11 @@ func TestConcurrentChunkAccess(t *testing.T) {
 		wg.Add(1)
 		go func(w int) {
 			defer wg.Done()
-			for i := 0; i < 40; i++ {
+			loops := 40
+			if testing.Short() {
+				loops = 4
+			}
+			for i := 0; i < loops; i++ {
 				start := ((w*13 + i*7) % 5) * hlChunk
 				lines, _ := d.Lines(start, start+hlChunk)
 				if len(lines) == 0 {

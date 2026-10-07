@@ -161,6 +161,9 @@ func TestSubmitReviewPayload(t *testing.T) {
 }
 
 func TestPRSessionCloseRefCleanup(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping in short mode")
+	}
 	if !gitInstalled() {
 		t.Skip("git not installed")
 	}

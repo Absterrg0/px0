@@ -46,10 +46,13 @@ build: web
 test: web
 	go test -v .
 
+web-check:
+	@node ./scripts/check-web.js
+
 test-short:
 	go test -short .
 
-check: web test-short
+check: web-check web test-short
 
 bench:
 	go test -bench=. -benchmem -run=^$$ .

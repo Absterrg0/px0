@@ -6,24 +6,28 @@ Welcome agent! This document contains essential instructions and workflows for w
 
 ## 1. Quick Development Workflow (Fast Inner Loop)
 
-To keep your iteration fast and avoid unnecessary delays:
+To keep iteration fast and avoid unnecessary delays:
+
+> [!IMPORTANT]
+> **Do NOT run tests after every intermediate change.** Running test suites repeatedly after every small edit severely slows things down. Complete all planned code and asset changes first. Run tests only once all changes are in place, and then iterate on fixing any failures until everything passes cleanly.
 
 | Task | Command | Typical Time | Notes |
 | :--- | :--- | :--- | :--- |
-| **Fast Verification** | `make check` or `go test -short .` | **~10s** | Use this during active code editing. Runs fast unit tests and bundle checks. |
+| **Frontend Check** | `make web-check` or `npm run check` | **<100ms** | Validates JS syntax, relative imports, and runs frontend tests. |
+| **Frontend Bundle** | `make web` or `node scripts/build-web.js` | **<50ms** | Run whenever modifying files under `web/src/`. |
 | **Build Binary** | `make build` | **~2s** | Bundles frontend (`web/app.js`) and compiles local `./px0` binary. |
-| **Frontend Bundle** | `make web` or `node scripts/build-web.js` | **<100ms** | Run whenever modifying files under `web/src/`. |
-| **Full Test Suite** | `make test` or `go test .` | **~20s** | Run before concluding your task or opening a PR. |
+| **Fast Verification** | `make check` or `go test -short .` | **~7s** | Runs frontend validation, asset bundling, and fast Go unit tests. |
+| **Full Test Suite** | `make test` or `go test .` | **~20s** | Run once all changes are done; iterate until all tests pass before concluding. |
 
 > [!TIP]
-> Always run `go test .` rather than `go test ./...` in the root package to avoid traversing external directories or fixtures.
+> Isolated components in `internal/` can be tested in milliseconds without running the full test suite (e.g. `go test ./internal/table` takes ~7ms).
 
 ---
 
 ## 2. Codebase Organization
 
-- **Backend Architecture**: All Go source files live in the root package (`package main`). There are no subpackages. Assets are statically embedded via `//go:embed`.
-- **Frontend Architecture**: Modular ES modules reside in [`web/src/`](web/src/) and are bundled into [`web/app.js`](web/app.js) via [`scripts/build-web.js`](scripts/build-web.js).
+- **Backend Architecture**: Go source files live in the root package (`package main`), with decoupled subsystems moving into `internal/` packages (e.g. [`internal/table/`](internal/table/)). Assets are statically embedded via `//go:embed`.
+- **Frontend Architecture**: Modular ES modules reside in [`web/src/`](web/src/) and are bundled into [`web/app.js`](web/app.js) via [`scripts/build-web.js`](scripts/build-web.js). Checked via [`scripts/check-web.js`](scripts/check-web.js).
 - **Benchmark Corpus**: Heavy repositories for benchmarking live in `../bench-repos` (outside the project root) to keep workspace searches and indexers fast.
 - **Detailed Map**: For a complete file catalog and UI element mapping, see [`docs/agents/README.md`](docs/agents/README.md).
 
@@ -40,7 +44,7 @@ To keep your iteration fast and avoid unnecessary delays:
 
 ## 4. Documentation Policy
 
-- **During Iterative Work**: Focus on code changes and fast verification (`make check`). Do not block your workflow with premature documentation edits.
+- **During Iterative Work**: Focus on completing code changes first before running verifications. Do not block your workflow with premature documentation edits.
 - **On Feature Completion**: If you introduce a new feature, CLI flag, shortcut, or major architectural change, update the corresponding documentation:
   - CLI flags / Shortcuts -> [`README.md`](README.md)
   - Major architectural patterns -> [`docs/internals/`](docs/internals/)

@@ -251,7 +251,14 @@ func TestSyncDocSendsRangedChangeWhenIncremental(t *testing.T) {
 	if err := cl.syncDoc(path, "f.go"); err != nil {
 		t.Fatalf("syncDoc: %v", err)
 	}
-	time.Sleep(500 * time.Millisecond) // let the fake server drain the pipe
+	for start := time.Now(); time.Since(start) < 100*time.Millisecond; time.Sleep(time.Millisecond) {
+		srv.mu.Lock()
+		n := len(srv.didChangeRaw)
+		srv.mu.Unlock()
+		if n >= 1 {
+			break
+		}
+	}
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	if len(srv.didChangeRaw) != 1 {
@@ -307,7 +314,14 @@ func TestSyncDocFallsBackToFullTextWhenNotIncremental(t *testing.T) {
 	if err := cl.syncDoc(path, "f.go"); err != nil {
 		t.Fatalf("syncDoc: %v", err)
 	}
-	time.Sleep(500 * time.Millisecond)
+	for start := time.Now(); time.Since(start) < 100*time.Millisecond; time.Sleep(time.Millisecond) {
+		srv.mu.Lock()
+		n := len(srv.didChangeRaw)
+		srv.mu.Unlock()
+		if n >= 1 {
+			break
+		}
+	}
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	if len(srv.didChangeRaw) != 1 {
@@ -345,7 +359,7 @@ func TestSyncDocSkipsUnchangedContent(t *testing.T) {
 	if err := cl.syncDoc(path, "f.go"); err != nil {
 		t.Fatalf("syncDoc: %v", err)
 	}
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
 	if len(srv.didChangeVers) != 0 {

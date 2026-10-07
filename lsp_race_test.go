@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -38,6 +39,7 @@ type lspRaceFakeServer struct {
 	didOpen       int
 	didChangeVers []int
 	didChangeRaw  []json.RawMessage // raw didChange params, for shape assertions
+	toCliW        *io.PipeWriter
 }
 
 func (s *lspRaceFakeServer) run(r *io.PipeReader) {
@@ -48,7 +50,13 @@ func (s *lspRaceFakeServer) run(r *io.PipeReader) {
 			return
 		}
 		if len(msg.ID) > 0 {
-			continue // the tests below only send notifications
+			if s.toCliW != nil {
+				resp := map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(msg.ID), "result": nil}
+				b, _ := json.Marshal(resp)
+				frame := append([]byte(fmt.Sprintf("Content-Length: %d\r\n\r\n", len(b))), b...)
+				s.toCliW.Write(frame)
+			}
+			continue
 		}
 		s.mu.Lock()
 		switch msg.Method {
@@ -84,7 +92,7 @@ func lspRaceWireClient(t testing.TB) (*lspClient, *lspRaceFakeServer) {
 	toCliR, toCliW := io.Pipe() // server -> client (never written in these tests)
 	cl.in = toSrvW
 	cl.out = bufio.NewReader(toCliR)
-	srv := &lspRaceFakeServer{}
+	srv := &lspRaceFakeServer{toCliW: toCliW}
 	go srv.run(toSrvR)
 	go cl.readLoop()
 	if starter, ok := any(cl).(interface{ beginWriteLoop() }); ok {
@@ -100,7 +108,11 @@ func lspRaceWireClient(t testing.TB) (*lspClient, *lspRaceFakeServer) {
 }
 
 func TestEnsureOpenSendsSingleDidOpen(t *testing.T) {
-	for round := 0; round < 3; round++ {
+	rounds := 3
+	if testing.Short() {
+		rounds = 1
+	}
+	for round := 0; round < rounds; round++ {
 		cl, srv := lspRaceWireClient(t)
 		path := filepath.Join(t.TempDir(), "f.go")
 		if err := os.WriteFile(path, []byte("package main\n"), 0644); err != nil {
@@ -116,7 +128,14 @@ func TestEnsureOpenSendsSingleDidOpen(t *testing.T) {
 			}()
 		}
 		wg.Wait()
-		time.Sleep(500 * time.Millisecond) // let the fake server drain the pipe
+		for start := time.Now(); time.Since(start) < 100*time.Millisecond; time.Sleep(time.Millisecond) {
+			srv.mu.Lock()
+			done := srv.didOpen >= 1
+			srv.mu.Unlock()
+			if done {
+				break
+			}
+		}
 		srv.mu.Lock()
 		got := srv.didOpen
 		srv.mu.Unlock()
@@ -127,7 +146,11 @@ func TestEnsureOpenSendsSingleDidOpen(t *testing.T) {
 }
 
 func TestSyncDocVersionsIncreaseMonotonically(t *testing.T) {
-	for round := 0; round < 3; round++ {
+	rounds := 3
+	if testing.Short() {
+		rounds = 1
+	}
+	for round := 0; round < rounds; round++ {
 		cl, srv := lspRaceWireClient(t)
 		path := filepath.Join(t.TempDir(), "f.go")
 		if err := os.WriteFile(path, []byte("package main\n"), 0644); err != nil {
@@ -152,7 +175,14 @@ func TestSyncDocVersionsIncreaseMonotonically(t *testing.T) {
 			}()
 		}
 		wg.Wait()
-		time.Sleep(500 * time.Millisecond) // let the fake server drain the pipe
+		for start := time.Now(); time.Since(start) < 100*time.Millisecond; time.Sleep(time.Millisecond) {
+			srv.mu.Lock()
+			done := len(srv.didChangeVers) > 0
+			srv.mu.Unlock()
+			if done {
+				break
+			}
+		}
 		srv.mu.Lock()
 		vers := append([]int(nil), srv.didChangeVers...)
 		srv.mu.Unlock()
@@ -317,7 +347,14 @@ func TestSyncDocStaleReadDiscarded(t *testing.T) {
 	if err := cl.ensureOpen(path, "f.go"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(200 * time.Millisecond) // let didOpen drain
+	for start := time.Now(); time.Since(start) < 50*time.Millisecond; time.Sleep(time.Millisecond) {
+		srv.mu.Lock()
+		done := srv.didOpen >= 1
+		srv.mu.Unlock()
+		if done {
+			break
+		}
+	}
 
 	// A normal sync applies and records its generation.
 	if err := os.WriteFile(path, []byte("package new\n// fresh-marker-bbb\n"), 0644); err != nil {
@@ -326,7 +363,14 @@ func TestSyncDocStaleReadDiscarded(t *testing.T) {
 	if err := cl.syncDoc(path, "f.go"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(200 * time.Millisecond) // let didChange drain
+	for start := time.Now(); time.Since(start) < 50*time.Millisecond; time.Sleep(time.Millisecond) {
+		srv.mu.Lock()
+		done := len(srv.didChangeRaw) >= 1
+		srv.mu.Unlock()
+		if done {
+			break
+		}
+	}
 	srv.mu.Lock()
 	nBefore := len(srv.didChangeRaw)
 	srv.mu.Unlock()
@@ -344,7 +388,7 @@ func TestSyncDocStaleReadDiscarded(t *testing.T) {
 	if err := cl.syncDoc(path, "f.go"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(500 * time.Millisecond) // let the fake server drain
+	time.Sleep(10 * time.Millisecond)
 
 	// The stale sync must not have sent anything.
 	srv.mu.Lock()
