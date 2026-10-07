@@ -162,6 +162,20 @@ func TestAgentDetectListsKnownHarnesses(t *testing.T) {
 	}
 }
 
+func TestAgentDetectLazyModels(t *testing.T) {
+	isolateSettings(t)
+	m, err := newAgentManager(t.TempDir(), "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := m.Detect()
+	for _, h := range got {
+		if len(h.Models) > 0 {
+			t.Fatalf("harness %q had models eagerly discovered when unselected", h.Name)
+		}
+	}
+}
+
 func TestAgentSelectPersistsOutsideWorkspace(t *testing.T) {
 	cfg := isolateSettings(t)
 	root := t.TempDir()
