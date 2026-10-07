@@ -492,7 +492,7 @@ func TestAgentAllowsNonOverlappingEditsInParallel(t *testing.T) {
 		t.Skip("git not installed")
 	}
 	root := gitRepo(t)
-	s := agentServer(t, root, writeHarness(t, "sleep 1\n"))
+	s := agentServer(t, root, writeHarness(t, "sleep 0.15\n"))
 
 	code, first := agentPost(t, s, "/api/agent/edit?path=keep.go&l1=1&l2=1&instruction=one")
 	if code != 200 {

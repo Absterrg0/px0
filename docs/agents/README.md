@@ -39,8 +39,9 @@ Whenever modifying, adding, or refactoring code in this repository, you must aud
 
 ## 3. Checklist for Agents Prior to Submitting Work
 
-- Verification: Ran `go test ./...` and confirmed all unit/regression tests pass (`ok px0`).
-- Build Integrity: Verified successful build with `go build -o px0 .`.
+- Fast Inner Loop: Run `make check` or `go test -short .` for fast iteration (~10s).
+- Full Verification: Ran `make test` or `go test .` and confirmed all unit/regression tests pass (`ok px0`).
+- Build Integrity: Verified successful build with `make build` (or `go build -o px0 .`).
 - Architecture Sync: Any new optimization, algorithmic adjustment, or structural change is documented in the corresponding [`docs/internals/`](../internals/README.md) write-up.
 - Flag & Shortcut Sync: Any new keyboard shortcut, UI behavior, or CLI flag is reflected in [`README.md`](../../README.md).
 - Benchmark Alignment: If search, highlight, or index performance characteristics change, verify whether [`BENCHMARKS.md`](../../BENCHMARKS.md) requires updated notes or numbers.

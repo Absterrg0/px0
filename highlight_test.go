@@ -36,8 +36,12 @@ func fixtures(t *testing.T) []string {
 		}
 		return nil
 	})
-	if len(files) > 400 {
-		files = files[:400]
+	maxFiles := 400
+	if testing.Short() {
+		maxFiles = 10
+	}
+	if len(files) > maxFiles {
+		files = files[:maxFiles]
 	}
 	if len(files) == 0 {
 		t.Skip("no fixtures")
