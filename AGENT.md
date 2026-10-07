@@ -20,13 +20,18 @@ To keep iteration fast and avoid unnecessary delays:
 | **Full Test Suite** | `make test` or `go test .` | **~20s** | Run once all changes are done; iterate until all tests pass before concluding. |
 
 > [!TIP]
-> Isolated components in `internal/` can be tested in milliseconds without running the full test suite (e.g. `go test ./internal/table` takes ~7ms).
+> Isolated components in `internal/` can be tested in milliseconds without running the full test suite (e.g. `go test ./internal/table`, `go test ./internal/ignore`, `go test ./internal/fuzzy`, `go test ./internal/metrics` take ~5–10ms).
 
 ---
 
 ## 2. Codebase Organization
 
-- **Backend Architecture**: Go source files live in the root package (`package main`), with decoupled subsystems moving into `internal/` packages (e.g. [`internal/table/`](internal/table/)). Assets are statically embedded via `//go:embed`.
+- **Backend Architecture**: Go source files live in the root package (`package main`), with decoupled subsystems extracted into `internal/` packages:
+  - [`internal/table/`](internal/table/): Tabular formatting (CSV/TSV)
+  - [`internal/ignore/`](internal/ignore/): `.gitignore` parsing, fnmatch globbing, and ignore trees
+  - [`internal/fuzzy/`](internal/fuzzy/): Bounded two-pass fuzzy path finder and scoring algorithm
+  - [`internal/metrics/`](internal/metrics/): System resource usage, RSS, CPU sampling, and OS-specific rusage
+  Root files provide backward-compatible facades and type aliases. Assets are statically embedded via `//go:embed`.
 - **Frontend Architecture**: Modular ES modules reside in [`web/src/`](web/src/) and are bundled into [`web/app.js`](web/app.js) via [`scripts/build-web.js`](scripts/build-web.js). Checked via [`scripts/check-web.js`](scripts/check-web.js).
 - **Benchmark Corpus**: Heavy repositories for benchmarking live in `../bench-repos` (outside the project root) to keep workspace searches and indexers fast.
 - **Detailed Map**: For a complete file catalog and UI element mapping, see [`docs/agents/README.md`](docs/agents/README.md).
