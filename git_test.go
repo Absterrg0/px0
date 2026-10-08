@@ -418,7 +418,7 @@ func TestUpdateGitStatusSeesEditsWithUnchangedStatus(t *testing.T) {
 
 	// rewrite keeps the byte size and pushes the mtime forward, so only the
 	// mtime gives the edit away even on filesystems with coarse timestamps.
-	rewrite := func(rel, body string, wantStatus string) {
+	rewrite := func(rel, body, wantStatus string) {
 		t.Helper()
 		p := filepath.Join(root, filepath.FromSlash(rel))
 		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {

@@ -55,7 +55,7 @@ type Index struct {
 	gitFiles         []string
 	gitStatusMap     map[string]string
 	gitStagedMap     map[string]bool
-	gitStamps        map[string]string // listed path -> size and mtime, from the last UpdateGitStatus
+	gitStamps        map[string]string // listed path -> fileStamp, as of the last status read
 	gitYourStatusMap map[string]string
 	diffBase         string
 	prHead           string
